@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: iron-front
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run build
+    startCommand: npm run server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: MINI_APP_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: iron-front-db
+          property: connectionString
+      - key: DISABLE_BOT_POLLING
+        value: "false"
+databases:
+  - name: iron-front-db
+    plan: free
+    region: frankfurt
+    databaseName: iron_front
+    user: iron_front
