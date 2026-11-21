@@ -10,12 +10,17 @@ export function validateInitData(initData, token, now = Date.now()) {
   if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !Number.isFinite(authDate) || !userRaw) return null;
   if (Math.abs(Math.floor(now / 1000) - authDate) > 86_400) return null;
   params.delete('hash');
-  params.delete('signature');
-  const dataCheckString = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('\n');
+  // Telegram включает поле `signature` в строку проверки HMAC. На случай старых клиентов принимаем и вариант без него:
+  // оба варианта подписаны токеном вашего бота, так что стойкость проверки не снижается.
   const secretKey = createHmac('sha256', 'WebAppData').update(token).digest();
-  const calculated = createHmac('sha256', secretKey).update(dataCheckString).digest();
   const supplied = Buffer.from(hash, 'hex');
-  if (supplied.length !== calculated.length || !timingSafeEqual(supplied, calculated)) return null;
+  const matches = (entries) => {
+    const dcs = entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join('\n');
+    const calculated = createHmac('sha256', secretKey).update(dcs).digest();
+    return supplied.length === calculated.length && timingSafeEqual(supplied, calculated);
+  };
+  const all = [...params.entries()];
+  if (!matches([...all]) && !matches(all.filter(([k]) => k !== 'signature'))) return null;
   try {
     const user = JSON.parse(userRaw);
     if (!user?.id || !/^\d+$/.test(String(user.id))) return null;
