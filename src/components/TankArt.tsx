@@ -1,42 +1,93 @@
-import type {Tank} from '../types';
-const palettes=['#788b52','#9b7651','#657b46','#a2a06a','#637a62','#788d55','#6e815d','#5c7552','#7c7770','#7b8661','#9b8357','#6f8171','#71856b','#687a68','#6b766a','#8b8a72'];
-const turrets=[
-  'M91 67 Q100 43 139 42 Q170 43 179 64 L171 83 Q130 94 88 82Z',
-  'M91 61 L105 34 Q132 26 165 35 L181 57 L176 86 Q130 98 84 84Z',
-  'M91 66 L103 42 Q130 31 163 42 L178 66 L170 87 Q130 96 87 84Z',
-  'M89 67 L104 45 L158 42 L178 60 L170 82 L92 83Z',
-  'M93 66 L111 42 L155 40 L174 59 L169 82 L91 84Z',
-  'M91 66 L111 39 L160 39 L183 61 L172 84 L89 83Z',
-  'M91 66 L105 42 L159 39 L182 57 L173 82 L91 84Z',
-  'M91 66 L110 38 L161 39 L184 58 L174 83 L89 84Z',
-  'M86 66 Q95 39 137 38 Q174 39 183 64 L174 86 Q130 96 82 83Z',
-  'M89 65 L105 41 L159 39 L181 60 L170 84 L88 84Z',
-  'M90 67 Q102 44 139 44 Q168 44 178 64 L169 83 Q130 92 87 83Z',
-  'M88 66 L105 38 L159 40 L180 62 L170 86 L87 84Z',
-  'M90 67 L108 39 L165 39 L185 60 L176 82 L88 83Z',
-  'M90 67 L108 39 L162 39 L184 60 L174 83 L89 83Z',
-  'M86 66 L105 39 L160 39 L185 62 L174 85 L84 84Z',
-  'M90 66 L112 38 L164 40 L185 62 L175 85 L87 84Z'
+import type { TankClass } from '../types';
+
+const PALETTES = [
+  ['#5a6b3a', '#44522b', '#2f3a1d'], ['#6e6a52', '#555240', '#3b392c'], ['#59626a', '#444c53', '#2e353a'], ['#7a6a43', '#5f5233', '#463c24'],
+  ['#4f6258', '#3d4d44', '#2a362f'], ['#6b5a4a', '#52443a', '#392f28'], ['#5b5f45', '#474a35', '#33351f'], ['#626a6f', '#4c5357', '#363c3f'],
 ];
-export function TankArt({tank,large=false}:{tank:Tank;large?:boolean}){
- const s=tank.shape%16,c=palettes[s],modern=s>=3&&s<=7||s>=12,heavy=[1,2,8,11,13,14,15].includes(s),wheels=heavy?7:6;
- const barrel=s===1?104:s===8?96:s===14?112:88;
- const hull=modern?'M29 91 L52 68 L207 68 L231 91 L218 119 L43 119Z':'M25 94 L43 69 Q130 52 217 69 L235 98 L218 119 L42 119Z';
- return <svg className={large?'tank-art tank-large':'tank-art'} viewBox="0 0 260 150" role="img" aria-label={`Иллюстрация ${tank.name}`}>
-  <defs><linearGradient id={`body${s}`} x2="0" y2="1"><stop stopColor={c}/><stop offset="1" stopColor="#344236"/></linearGradient><linearGradient id={`metal${s}`}><stop stopColor="#b4bd94"/><stop offset="1" stopColor="#475445"/></linearGradient><linearGradient id={`top${s}`} x2="0" y2="1"><stop stopColor="#d1d5a2"/><stop offset="1" stopColor={c}/></linearGradient></defs>
-  <ellipse cx="130" cy="127" rx="108" ry="12" fill="#111711" opacity=".38"/>
-  <path d={hull} fill="#252d27" stroke="#141b16" strokeWidth="4"/>
-  <path d="M39 96 Q130 77 221 96 L208 113 Q130 128 52 113Z" fill={`url(#body${s})`} stroke="#202a21" strokeWidth="2"/>
-  {Array.from({length:wheels},(_,i)=><g key={i}><circle cx={54+i*(152/(wheels-1))} cy="105" r={heavy?10:9} fill="#68745f" stroke="#202921" strokeWidth="4"/><circle cx={54+i*(152/(wheels-1))} cy="105" r="3" fill="#c0bd91"/><path d={`M${54+i*(152/(wheels-1))} 99v12`} stroke="#39473a" strokeWidth="2"/></g>)}
-  {modern?<path d="M42 92 58 74 78 75 75 104 55 109 42 102Z M185 75 205 74 220 92 218 102 205 109 185 104Z" fill="#4a5948" stroke="#263328" strokeWidth="2"/>:<path d="M48 82 64 75 69 99 49 104Z M191 75 210 82 211 104 191 99Z" fill="#56644f" stroke="#263328" strokeWidth="2"/>}
-  <path d={turrets[s]} fill={`url(#top${s})`} stroke="#29342a" strokeWidth="3"/>
-  <path d={`M${130+(s%5)-2} 59 L${130+(s%5)} ${heavy?35:39} L${130+barrel} ${heavy?29:34} L${130+barrel+3} ${heavy?37:42} L${151+(s%4)} 64Z`} fill="#414b40" stroke="#222b23" strokeWidth="3"/>
-  <path d={`M${130+barrel-4} ${heavy?30:35}l12 -2v7l-12 2Z`} fill="#252e27"/>
-  <path d="M111 53 Q130 42 149 53 L151 62 Q130 69 109 62Z" fill={`url(#metal${s})`} opacity=".95"/>
-  <rect x={s%2?105:111} y="54" width="13" height="6" rx="2" fill="#d4c58a" opacity=".85"/>
-  <path d={modern?'M74 76l-10 12m122-12 10 12':'M72 80l-16 9m129-10 15 8'} stroke="#d0c38a" strokeWidth="4" opacity=".75"/>
-  {s===1||s===8?<path d="M101 48 94 39 101 35 109 44 M158 46l8-8 8 4-8 9" fill="#58634f" stroke="#29342a" strokeWidth="2"/>:null}
-  {modern?<path d="M89 88h82M93 93h74" stroke="#c1c99a" strokeWidth="2" opacity=".38"/>:<path d="M38 96 Q130 77 222 96" fill="none" stroke="#c5b77e" strokeWidth="2" opacity=".55"/>}
-  <path d="M125 43v-7m0 0 15-7" stroke="#d6d1a2" strokeWidth="2" opacity=".7"/>
- </svg>;
+const RARITY_GLOW: Record<string, string> = { Обычная: '#8a959b', Редкая: '#4f93c9', Эпическая: '#a370d6', Легендарная: '#e0932a' };
+
+interface Props { cls: TankClass; shape: number; rarity?: string; size?: number; enemy?: boolean; dead?: boolean; className?: string }
+
+/** Векторная карточка танка. Силуэт зависит от класса, оттенок и детали — от модели. */
+export function TankArt({ cls, shape, rarity, size = 160, enemy = false, dead = false, className }: Props) {
+  const idx = shape < 0 ? 2 : shape;
+  const [c1, c2, c3] = enemy ? ['#6a4a45', '#523833', '#3a2724'] : PALETTES[idx % PALETTES.length];
+  const v = idx % 3; // вариации ствола и башни
+  const glow = rarity ? RARITY_GLOW[rarity] : 'transparent';
+  const gid = `g${idx}${cls}${enemy ? 'e' : ''}`;
+  return (
+    <svg className={className} width={size} height={size * 0.56} viewBox="0 0 200 112" role="img" aria-label="Танк" style={{ opacity: dead ? 0.35 : 1, filter: dead ? 'grayscale(1)' : undefined }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c1} /><stop offset="1" stopColor={c2} /></linearGradient>
+      </defs>
+      <ellipse cx="100" cy="100" rx="82" ry="6" fill="#000" opacity="0.35" />
+      {rarity && <ellipse cx="100" cy="98" rx="70" ry="4" fill={glow} opacity="0.22" />}
+      <g transform={enemy ? 'translate(200 0) scale(-1 1)' : undefined}>
+        {cls === 'light' && <Light g={gid} c2={c2} c3={c3} v={v} />}
+        {cls === 'medium' && <Medium g={gid} c2={c2} c3={c3} v={v} />}
+        {cls === 'heavy' && <Heavy g={gid} c2={c2} c3={c3} v={v} />}
+        {cls === 'td' && <Td g={gid} c2={c2} c3={c3} v={v} />}
+        {cls === 'arty' && <Arty g={gid} c2={c2} c3={c3} v={v} />}
+      </g>
+    </svg>
+  );
 }
+
+interface PartProps { g: string; c2: string; c3: string; v: number }
+const Tracks = ({ x, w, y = 80, h = 18, wheels, c3 }: { x: number; w: number; y?: number; h?: number; wheels: number; c3: string }) => (
+  <g>
+    <rect x={x} y={y} width={w} height={h} rx={h / 2} fill="#1a1d1f" stroke="#0c0e0f" />
+    {Array.from({ length: wheels }, (_, i) => (
+      <circle key={i} cx={x + h / 2 + (i * (w - h)) / (wheels - 1)} cy={y + h / 2} r={h / 2 - 3} fill={c3} stroke="#0c0e0f" />
+    ))}
+  </g>
+);
+const Light = ({ g, c2, c3, v }: PartProps) => (
+  <g>
+    <Tracks x={52} w={100} y={82} h={14} wheels={5} c3={c3} />
+    <path d="M56 82l8-14h72l12 14z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.5" />
+    <path d="M86 68l6-13h26l8 13z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.5" />
+    <rect x="118" y={60 + v} width={34 + v * 6} height="3.2" rx="1.5" fill={c3} />
+    <circle cx="104" cy="62" r="2.4" fill={c2} />
+  </g>
+);
+const Medium = ({ g, c2, c3, v }: PartProps) => (
+  <g>
+    <Tracks x={40} w={124} wheels={6} c3={c3} />
+    <path d="M44 80l10-16h96l14 16z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.6" />
+    <path d="M74 64l8-18h38l12 18z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.6" />
+    <rect x="124" y={50 + v} width={42 + v * 6} height="4.5" rx="2" fill={c3} />
+    <rect x="120" y="48" width="8" height="9" rx="2" fill={c2} stroke={c3} />
+    <circle cx="100" cy="52" r="3" fill={c3} />
+  </g>
+);
+const Heavy = ({ g, c2, c3, v }: PartProps) => (
+  <g>
+    <Tracks x={34} w={134} y={78} h={22} wheels={7} c3={c3} />
+    <path d="M38 78l8-20h108l16 20z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.8" />
+    <path d="M66 58l10-22h52l14 22z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.8" />
+    <rect x="132" y={40 + v} width={36 + v * 5} height="7" rx="2.5" fill={c3} />
+    <rect x={164 + v * 5} y={38.5 + v} width="6" height="10" rx="2" fill={c2} stroke={c3} />
+    <rect x="128" y="38" width="10" height="13" rx="2" fill={c2} stroke={c3} />
+    <circle cx="98" cy="44" r="3.5" fill={c3} />
+  </g>
+);
+const Td = ({ g, c2, c3, v }: PartProps) => (
+  <g>
+    <Tracks x={42} w={120} y={82} h={16} wheels={6} c3={c3} />
+    <path d="M44 82l6-18 20-10h70l18 28z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.7" />
+    <path d="M74 54l8-8h40l8 8z" fill={c2} stroke={c3} strokeWidth="1.4" />
+    <rect x="140" y={61 + v} width={46 + v * 5} height="4.6" rx="2" fill={c3} />
+    <rect x="136" y={59 + v} width="8" height="9" rx="2" fill={c2} stroke={c3} />
+  </g>
+);
+const Arty = ({ g, c2, c3, v }: PartProps) => (
+  <g>
+    <Tracks x={40} w={122} y={82} h={16} wheels={6} c3={c3} />
+    <path d="M44 82l8-14h98l12 14z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.7" />
+    <path d="M60 68V44h56l8 24z" fill={`url(#${g})`} stroke={c3} strokeWidth="1.7" />
+    <path d="M70 44v-6h36v6" fill="none" stroke={c3} strokeWidth="1.5" />
+    <g transform="rotate(-22 112 54)"><rect x="112" y="51" width={50 + v * 6} height="5.5" rx="2" fill={c3} /><rect x="108" y="48" width="12" height="12" rx="2" fill={c2} stroke={c3} /></g>
+    <rect x="46" y="64" width="12" height="6" rx="1" fill={c2} stroke={c3} />
+  </g>
+);

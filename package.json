@@ -1,13 +1,13 @@
 {
   "name": "iron-front",
-  "version": "0.5.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node --test server/tests/*.test.mjs",
     "server": "node server/server.mjs",
     "dev:server": "node server/server.mjs",
     "dev:all": "node server/dev-all.mjs",
@@ -16,24 +16,17 @@
   "dependencies": {
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "framer-motion": "^12.23.0",
-    "lucide-react": "^0.468.0",
+    "autoprefixer": "^10.4.21",
     "pg": "^8.16.3",
+    "postcss": "^8.5.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "three": "^0.180.0",
+    "tailwindcss": "^3.4.17",
     "typescript": "~5.7.2",
     "vite": "^7.1.7"
   },
-  "devDependencies": {
-    "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
-    "vitest": "^3.0.5"
-  },
   "engines": {
-    "node": "22.x"
+    "node": ">=20.19.0"
   }
 }

@@ -1,10 +1,14 @@
 import http from 'node:http';
 import { readFileSync, existsSync, createReadStream } from 'node:fs';
-import { resolve, extname, normalize } from 'node:path';
-import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
-import pg from 'pg';
+import { resolve, extname, normalize, sep } from 'node:path';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { validateInitData, devUser, createRateLimiter } from './auth.mjs';
+import { runMigrations } from './db/migrations.mjs';
+import { createPgStore } from './store/pg-store.mjs';
+import { createFileStore } from './store/file-store.mjs';
+import { createGameApi, summarize } from './api.mjs';
+import { createState } from './game/legacy.mjs';
 
-const { Pool } = pg;
 const root = process.cwd();
 const envPath = resolve(root, '.env');
 if (existsSync(envPath)) {
@@ -21,7 +25,14 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || '';
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || (TOKEN ? createHash('sha256').update(`iron-front-webhook:${TOKEN}`).digest('hex') : '');
 const USE_WEBHOOK = process.env.NODE_ENV === 'production' && Boolean(PUBLIC_URL) && Boolean(WEBHOOK_SECRET) && Boolean(TOKEN);
+const IS_PROD = process.env.NODE_ENV === 'production';
+const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
+// Ускорение таймеров только для локальной проверки; в production всегда 1.
+const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
+const VERSION = '2.0.0';
 const MAX_BODY = 256 * 1024;
+// pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
+const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;
 const pool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
@@ -64,43 +75,19 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
-function validateTelegramInitData(initData) {
-  if (!TOKEN || typeof initData !== 'string' || !initData || initData.length > 16_384) return null;
-  const params = new URLSearchParams(initData);
-  const hash = params.get('hash');
-  const authDate = Number(params.get('auth_date'));
-  const userRaw = params.get('user');
-  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !Number.isFinite(authDate) || !userRaw) return null;
-  if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > 86_400) return null;
-  params.delete('hash');
-  params.delete('signature');
-  const dataCheckString = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join('\n');
-  const secretKey = createHmac('sha256', 'WebAppData').update(TOKEN).digest();
-  const calculated = createHmac('sha256', secretKey).update(dataCheckString).digest();
-  const supplied = Buffer.from(hash, 'hex');
-  if (supplied.length !== calculated.length || !timingSafeEqual(supplied, calculated)) return null;
-  try {
-    const user = JSON.parse(userRaw);
-    if (!user?.id || !/^\d+$/.test(String(user.id))) return null;
-    return { id: String(user.id), username: String(user.username || '').slice(0, 64), firstName: String(user.first_name || 'Командир').slice(0, 80) };
-  } catch { return null; }
-}
+const validateTelegramInitData = (initData) => validateInitData(initData, TOKEN);
 function authenticatedUser(req) {
   const raw = req.headers['x-telegram-init-data'];
-  return validateTelegramInitData(Array.isArray(raw) ? raw[0] : raw);
+  const user = validateTelegramInitData(Array.isArray(raw) ? raw[0] : raw);
+  if (user) return user;
+  return devUser(req.headers['x-dev-user'], { production: IS_PROD, allow: ALLOW_DEV_AUTH });
 }
+let migrating = null;
 async function ensureDatabase() {
   if (!pool) return false;
   if (dbReady) return true;
-  await pool.query(`CREATE TABLE IF NOT EXISTS player_saves (
-    telegram_id BIGINT PRIMARY KEY,
-    username VARCHAR(64) NOT NULL DEFAULT '',
-    first_name VARCHAR(80) NOT NULL DEFAULT 'Командир',
-    save_data JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await pool.query('CREATE INDEX IF NOT EXISTS player_saves_updated_at_idx ON player_saves (updated_at DESC)');
+  migrating ??= runMigrations(pool).finally(() => { migrating = null; });
+  await migrating;
   dbReady = true;
   dbError = '';
   return true;
@@ -175,6 +162,24 @@ async function startBot() {
   }
 }
 
+const storeDeps = { createState, summarize };
+let gameStore = null;
+if (pool) {
+  const pgStore = createPgStore(pool, storeDeps);
+  gameStore = {
+    kind: pgStore.kind,
+    transact: async (...args) => { await ensureDatabase(); return pgStore.transact(...args); },
+    leaderboard: async (...args) => { await ensureDatabase(); return pgStore.leaderboard(...args); },
+    rankOf: async (...args) => { await ensureDatabase(); return pgStore.rankOf(...args); },
+  };
+} else if (!IS_PROD) {
+  gameStore = createFileStore(resolve(root, 'data', 'dev-store.json'), storeDeps);
+  console.log('[game] DATABASE_URL не задан — используется локальный файл data/dev-store.json (только для разработки).');
+}
+const gameApi = createGameApi({
+  store: gameStore, authenticate: authenticatedUser, limiter: createRateLimiter({ windowMs: 10_000, max: 60 }), timeScale: TIME_SCALE,
+});
+
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
   const allowedOrigin = process.env.CORS_ORIGIN || '';
@@ -183,7 +188,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Telegram-Init-Data');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Telegram-Init-Data,X-Dev-User');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
@@ -196,7 +201,7 @@ const server = http.createServer(async (req, res) => {
         try { await ensureDatabase(); await pool.query('SELECT 1'); database = 'connected'; }
         catch (error) { database = 'error'; dbError = String(error.message).slice(0, 180); }
       }
-      return send(res, 200, { ok: true, service: 'iron-front-api', version: '0.4.0', telegramBot: botState, telegramConfigured: Boolean(TOKEN), miniAppUrlConfigured: Boolean(MINI_APP_URL), database, databaseError: process.env.NODE_ENV === 'production' ? undefined : dbError });
+      return send(res, 200, { ok: true, service: 'iron-front-api', version: VERSION, game: gameStore ? gameStore.kind : 'unavailable', devAuth: !IS_PROD && ALLOW_DEV_AUTH, timeScale: TIME_SCALE, telegramBot: botState, telegramConfigured: Boolean(TOKEN), miniAppUrlConfigured: Boolean(MINI_APP_URL), database, databaseError: process.env.NODE_ENV === 'production' ? undefined : dbError });
     }
     if (url.pathname === '/api/telegram/webhook' && req.method === 'POST') {
       if (!USE_WEBHOOK || !TOKEN) return send(res, 404, { error: 'not_found' });
@@ -214,6 +219,14 @@ const server = http.createServer(async (req, res) => {
       if (!user) return send(res, 401, { error: 'telegram_auth_invalid', message: 'Не удалось проверить Telegram. Открой игру из Telegram.' });
       return send(res, 200, { ok: true, user: { id: user.id, username: user.username, firstName: user.firstName } });
     }
+    const gameResult = await gameApi(req, url, readBody);
+    if (gameResult) {
+      if (gameResult.status === 304) { res.writeHead(304, gameResult.headers); return res.end(); }
+      if (gameResult.raw) { res.writeHead(gameResult.status, { 'Content-Type': 'application/json; charset=utf-8', ...gameResult.headers }); return res.end(gameResult.raw); }
+      return send(res, gameResult.status, gameResult.body, gameResult.headers);
+    }
+    // Устаревший API v0.4.0: сохранён для совместимости со старыми клиентами. Игровое состояние v2 хранится
+    // отдельно и определяется сервером; данные из PUT на него больше не влияют.
     if (url.pathname === '/api/save' && (req.method === 'GET' || req.method === 'PUT')) {
       const user = authenticatedUser(req);
       if (!user) return send(res, 401, { error: 'unauthorized', message: 'Telegram-авторизация отсутствует или устарела.' });
@@ -237,7 +250,7 @@ const server = http.createServer(async (req, res) => {
       const dist = resolve(root, 'dist');
       const requested = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\]|\.\.(?:[/\\]|$))+/, '');
       const candidate = resolve(dist, requested || 'index.html');
-      const safePath = candidate.startsWith(dist + '/') || candidate === resolve(dist, 'index.html');
+      const safePath = candidate.startsWith(dist + sep) || candidate === resolve(dist, 'index.html');
       const file = safePath && existsSync(candidate) ? candidate : resolve(dist, 'index.html');
       if (existsSync(file)) {
         res.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream', 'Cache-Control': file.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable' });
@@ -251,7 +264,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => { console.log(`[api] IRON FRONT listening on ${PORT}`); startBot(); });
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[api] IRON FRONT ${VERSION} listening on ${PORT}`);
+  ensureDatabase().catch((error) => { dbError = String(error.message).slice(0, 180); console.error('[db] миграции не выполнены:', dbError); });
+  startBot();
+});
 
 async function shutdown() {
   server.close();
