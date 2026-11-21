@@ -3,7 +3,7 @@ import { Icon } from '../components/Icon';
 import { Btn, CostList, Panel, TimerBar } from '../components/ui';
 import { useGame } from '../state/GameProvider';
 import { useNav } from '../state/nav';
-import { duration } from '../lib/format';
+import { duration, focusPanel } from '../lib/format';
 
 const BRANCH_ICON: Record<string, string> = { armor: 'shield', weapons: 'attack', engines: 'speed', production: 'scrap', logistics: 'fuel', base: 'base' };
 
@@ -31,7 +31,7 @@ export function ResearchScreen() {
                   const state = s.done ? 'done' : s.queued ? 'busy' : s.problem?.code === 'prereq' || s.problem?.code === 'lab_level' ? 'locked' : 'open';
                   return (
                     <li key={t.id} className={i > 0 ? 'linked' : ''}>
-                      <button className={`node node-${state} ${sel === t.id ? 'on' : ''}`} onClick={() => setSel(t.id)} aria-label={t.name}>
+                      <button className={`node node-${state} ${sel === t.id ? 'on' : ''}`} onClick={() => { setSel(t.id); focusPanel('tech-detail'); }} aria-label={t.name}>
                         <span className="node-ico">{s.done ? <Icon name="check" size={15} /> : s.queued ? <Icon name="clock" size={15} /> : state === 'locked' ? <Icon name="lock" size={14} /> : <Icon name={BRANCH_ICON[bid] ?? 'info'} size={15} />}</span>
                         <span className="node-name">{t.name}</span>
                       </button>
@@ -44,7 +44,7 @@ export function ResearchScreen() {
         </div>
       </Panel>
 
-      <Panel title={cur.name} icon="research" className="detail" right={<span className="chip">{config.branches[cur.branch]}</span>}>
+      <Panel id="tech-detail" title={cur.name} icon="research" className="detail" right={<span className="chip">{config.branches[cur.branch]}</span>}>
         <p>{cur.desc}</p>
         {unlocks.length > 0 && <p className="muted small">Открывает технику: {unlocks.join(', ')}</p>}
         <ul className="bullets">

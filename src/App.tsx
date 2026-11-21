@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Icon } from './components/Icon';
+import { AwayModal, HelpModal, TutorialBar } from './components/Guide';
 import { ToastHost } from './components/ui';
 import { BaseScreen } from './screens/BaseScreen';
 import { BattleScreen } from './screens/BattleScreen';
@@ -27,6 +29,9 @@ const FULL_LABEL: Record<Screen, string> = { base: 'База', hangar: 'Анга
 function Shell() {
   const { view, config, unread } = useGame();
   const { screen, go } = useNav();
+  const [help, setHelp] = useState(false);
+  const tut = view.tutorial;
+  const hintScreen: Screen | null = !tut.done && !tut.ready ? (config.tutorial[tut.step]?.screen ?? null) : null;
   const readyAchievements = config.achievements.filter((a) => { const st = view.achievements.find((x) => x.id === a.id); return Boolean(st && !st.claimed && st.value >= a.goal); }).length;
   const claimable = view.quests.filter((q) => !q.claimed && q.progress >= q.goal).length + readyAchievements;
   const battleBadge = view.battle ? (view.battle.status === 'active' ? '!' : '★') : '';
@@ -38,27 +43,28 @@ function Shell() {
         <div className="brand"><span className="brand-mark">IF</span><div><b>IRON FRONT</b><small>Командный центр</small></div></div>
         <nav>
           {NAV.map((n) => (
-            <button key={n.id} className={`nav-item ${screen === n.id ? 'on' : ''}`} onClick={() => go(n.id)} aria-current={screen === n.id ? 'page' : undefined}>
+            <button key={n.id} className={`nav-item ${screen === n.id ? 'on' : ''} ${hintScreen === n.id && screen !== n.id ? 'hint' : ''}`} onClick={() => go(n.id)} aria-current={screen === n.id ? 'page' : undefined}>
               <Icon name={n.icon} size={19} /><span>{FULL_LABEL[n.id]}</span>{badge(n.id) && <em className="nbadge">{badge(n.id)}</em>}
             </button>
           ))}
         </nav>
+        <button className="nav-item help-btn" onClick={() => setHelp(true)}><Icon name="info" size={19} /><span>Справка</span></button>
         <div className="side-foot"><span>{view.nickname}</span><small>Уровень командира {view.commander.level}</small></div>
       </aside>
 
       <div className="main">
         <header className="topbar">
-          <div className="topbar-id"><span className="lvl-badge">{view.commander.level}</span><b>{view.nickname}</b></div>
+          <div className="topbar-id"><span className="lvl-badge">{view.commander.level}</span><b>{view.nickname}</b><button className="help-top" aria-label="Справка" onClick={() => setHelp(true)}><Icon name="info" size={18} /></button></div>
           <ul className="resbar" aria-label="Ресурсы">
             {RES_ORDER.map((k) => (
-              <li key={k} title={RES_LABEL[k]} className={k === 'fuel' || k === 'steel' || k === 'scrap' ? '' : ''}>
+              <li key={k} title={RES_LABEL[k]} onClick={() => setHelp(true)}>
                 <ResIcon k={k} size={15} /><b>{compact(view.resources[k])}</b>
                 {k !== 'credits' && k !== 'science' && <small>/{compact(view.caps[k])}</small>}
               </li>
             ))}
           </ul>
         </header>
-        <main className="content" key={screen}>
+        <main className={`content ${tut.done ? '' : 'has-tut'}`} key={screen}>
           {screen === 'base' && <BaseScreen />}
           {screen === 'hangar' && <HangarScreen />}
           {screen === 'build' && <BuildScreen />}
@@ -71,11 +77,14 @@ function Shell() {
 
       <nav className="bottomnav" aria-label="Основная навигация">
         {NAV.map((n) => (
-          <button key={n.id} className={`bn-item ${screen === n.id ? 'on' : ''}`} onClick={() => go(n.id)} aria-current={screen === n.id ? 'page' : undefined}>
+          <button key={n.id} className={`bn-item ${screen === n.id ? 'on' : ''} ${hintScreen === n.id && screen !== n.id ? 'hint' : ''}`} onClick={() => go(n.id)} aria-current={screen === n.id ? 'page' : undefined}>
             <Icon name={n.icon} size={22} /><span>{n.label}</span>{badge(n.id) && <em className="nbadge">{badge(n.id)}</em>}
           </button>
         ))}
       </nav>
+      <TutorialBar />
+      <AwayModal />
+      <HelpModal open={help} onClose={() => setHelp(false)} />
       <ToastHost />
     </div>
   );

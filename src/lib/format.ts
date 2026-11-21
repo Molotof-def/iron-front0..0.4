@@ -25,3 +25,9 @@ export const timeAgo = (ms: number, now: number): string => {
   if (s < 86400) return `${Math.floor(s / 3600)} ч назад`;
   return `${Math.floor(s / 86400)} д назад`;
 };
+
+/** На телефонах после выбора элемента прокручивает к панели с подробностями (на ПК панель и так на виду). */
+export const focusPanel = (id: string): void => {
+  if (typeof window === 'undefined' || window.innerWidth >= 1024) return;
+  window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+};

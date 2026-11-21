@@ -219,3 +219,32 @@ p, li, b, span, small { overflow-wrap: anywhere; }
   .plot-name { font-size: 24px; } .lvl-t { font-size: 20px; } .lvl { r: 20px; } .scene { max-height: none; }
   .mlist { max-height: 340px; overflow-y: auto; }
 }
+
+/* ---------- Обучение, справка, бонус ---------- */
+.help-top { margin-left: auto; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; color: var(--amber); border: 1px solid var(--line2); background: var(--panel); }
+.help-btn { margin-top: auto; } .resbar li { cursor: pointer; }
+.hint { position: relative; } .bn-item.hint::after, .nav-item.hint::after { content: ''; position: absolute; inset: 2px; border-radius: 9px; border: 2px solid var(--amber); animation: pulse 1.6s ease-in-out infinite; pointer-events: none; }
+.tut-bar { position: fixed; z-index: 40; left: calc(var(--sal) + 8px); right: calc(var(--sar) + 8px); bottom: calc(var(--nav-h) + var(--sab) + 8px); background: #1a2023; border: 1px solid var(--amber-d); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.55); animation: rise .3s ease-out; max-width: 560px; margin: 0 auto; }
+.tut-bar.ready { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 8px 28px rgba(0,0,0,.55); }
+.tut-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px 6px 12px; min-height: 52px; } .tut-title { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left; min-height: 40px; } .tut-title b { flex: 1; font-size: 14px; min-width: 0; } .tut-head .btn { min-height: 38px; padding: 0 12px; flex: none; } .tut-badge { padding: 1px 7px; border-radius: 999px; background: var(--amber); color: #1b1203; font-size: 11.5px; font-weight: 800; }
+.tut-body { padding: 0 12px 12px; display: grid; gap: 8px; } .tut-body p { font-size: 13px; color: #c4ccd0; } .tut-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; } .tut-here { display: inline-flex; gap: 6px; align-items: center; color: var(--amber); font-size: 13px; }
+.tut-steps { display: grid; gap: 6px; margin-bottom: 10px; } .tut-steps li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; opacity: .6; } .tut-steps li.cur { opacity: 1; background: var(--panel2); border: 1px solid var(--amber-d); } .tut-steps li.done { opacity: .8; }
+.ts-ico { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: var(--bg2); border: 1px solid var(--line2); font-size: 12px; font-weight: 700; } .done .ts-ico { background: var(--olive-d); border-color: var(--olive); color: #f0f4de; } .cur .ts-ico { background: var(--amber); color: #1b1203; border-color: var(--amber); }
+.ts-txt { display: grid; gap: 2px; font-size: 13.5px; min-width: 0; } .ts-txt small { color: var(--muted); font-size: 12.5px; }
+.bonus-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-bottom: 4px; } .bonus-days li { display: grid; place-items: center; gap: 2px; padding: 6px 0; border-radius: 8px; background: var(--bg2); border: 1px solid var(--line); color: var(--muted); } .bonus-days li.got { background: var(--olive-d); color: #f0f4de; border-color: var(--olive); } .bonus-days li.next { border-color: var(--amber); color: var(--amber); } .bonus-days li:last-child { border-style: dashed; }
+.help { display: grid; gap: 6px; } .help-q { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; text-align: left; min-height: 46px; } .help-q b { flex: 1; } .help li.on .help-q { border-color: var(--amber-d); } .help-a { display: grid; gap: 8px; padding: 10px 12px 4px; font-size: 14px; color: #c4ccd0; } .help-a li { padding-left: 14px; position: relative; } .help-a li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; background: var(--olive); border-radius: 1px; }
+.rec { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: rgba(227,154,45,.15); border: 1px solid var(--amber-d); color: var(--amber); font-size: 10.5px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.howto { margin: 6px 0 10px; padding: 8px 10px; background: var(--bg2); border: 1px solid var(--line); border-radius: 9px; } .howto summary { cursor: pointer; font-weight: 650; font-size: 13.5px; color: var(--amber); } .howto ul { display: grid; gap: 4px; margin: 8px 0; font-size: 13.5px; }
+@keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@media (min-width: 1024px) { .tut-bar { left: auto; right: 24px; bottom: 24px; width: 380px; margin: 0; } .nav-item.hint::after { inset: 0; } }
+@media (prefers-reduced-motion: reduce) { .hint::after { animation: none !important; opacity: 1 !important; } }
+
+.content.has-tut { padding-bottom: calc(var(--nav-h) + var(--sab) + 84px); }
+@media (min-width: 1024px) { .content.has-tut { padding-bottom: 32px; } }
+
+.panel { scroll-margin-top: 112px; }
+@media (max-width: 1023px) { .research-grid > .detail { order: -1; } }
+
+/* Уведомления сверху, чтобы не перекрывать подсказку обучения и нижнюю навигацию */
+.toasts { bottom: auto; top: calc(var(--sat) + 100px); }
+@media (min-width: 1024px) { .toasts { top: 72px; left: auto; right: 28px; transform: none; width: 380px; } }

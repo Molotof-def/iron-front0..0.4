@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { Btn, CostList, Panel, TimerBar } from '../components/ui';
 import { useGame } from '../state/GameProvider';
 import { useNav } from '../state/nav';
-import { duration } from '../lib/format';
+import { duration, focusPanel } from '../lib/format';
 import type { BuildingId, BuildingView } from '../types';
 
 function effectText(id: BuildingId, lvl: number, view: ReturnType<typeof useGame>['view']): string[] {
@@ -34,10 +34,10 @@ export function BuildScreen() {
   return (
     <div className="screen build-grid">
       <Panel title="Строительство" icon="build" className="scene-panel" right={<span className="muted small">Очереди {view.buildQueue.length}/{view.base.buildSlots}</span>}>
-        <BaseScene buildings={view.buildings} names={names} selected={sel} onSelect={setSel} />
+        <BaseScene buildings={view.buildings} names={names} selected={sel} onSelect={(id) => { setSel(id); focusPanel('build-detail'); }} />
       </Panel>
 
-      <Panel title={cfg.name} icon="build" className="detail" right={<span className="chip">Ур. {b.level}/{cfg.maxLevel}</span>}>
+      <Panel id="build-detail" title={cfg.name} icon="build" className="detail" right={<span className="chip">Ур. {b.level}/{cfg.maxLevel}</span>}>
         <p className="muted">{cfg.desc}</p>
         <p className="muted small"><Icon name="power" size={13} /> Потребление энергии: {cfg.power * Math.max(b.level, 0)} (+{cfg.power} за уровень)</p>
         <h4>Сейчас</h4>
@@ -62,7 +62,7 @@ export function BuildScreen() {
             const c = config.buildings.find((y) => y.id === x.id)!;
             return (
               <li key={x.id}>
-                <button className={`brow ${sel === x.id ? 'on' : ''}`} onClick={() => setSel(x.id)}>
+                <button className={`brow ${sel === x.id ? 'on' : ''}`} onClick={() => { setSel(x.id); focusPanel('build-detail'); }}>
                   <span className="b-ico"><Icon name={x.id === 'hq' ? 'base' : x.id === 'storage' ? 'steel' : x.id === 'factory' ? 'scrap' : x.id === 'lab' ? 'research' : x.id === 'radar' ? 'radar' : x.id === 'repair' ? 'wrench' : x.id === 'training' ? 'battle' : 'hangar'} size={18} /></span>
                   <span className="b-txt"><b>{c.name}</b><small>{c.category}</small></span>
                   <span className={`chip ${x.queued ? 'chip-amber' : ''}`}>{x.queued ? `→ ${x.queued.toLevel}` : x.level === 0 ? 'Нет' : `Ур. ${x.level}`}</span>

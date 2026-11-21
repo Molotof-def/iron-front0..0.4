@@ -42,6 +42,8 @@ function MissionBoard() {
   const problem = m.locked ? m.problem?.message ?? null : rulesProblem(m, picked, view.tanks, cls, view.base.squadLimit) ?? (view.resources.fuel < m.fuel ? `Не хватает топлива: нужно ${m.fuel}.` : null);
   const owned = view.tanks.filter((t) => t.owned);
   const list = view.missions.filter((x) => filter === 'all' || x.type === filter);
+  const open = view.missions.filter((x) => !x.locked);
+  const recommended = (open.find((x) => x.clears === 0) ?? open[open.length - 1])?.id;
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const limit = Math.min(view.base.squadLimit, m.rules?.maxSquad ?? 99);
 
@@ -54,7 +56,7 @@ function MissionBoard() {
             <li key={x.id}>
               <button className={`mrow ${selId === x.id ? 'on' : ''} ${x.locked ? 'locked' : ''} t-${x.type}`} onClick={() => { setSelId(x.id); if (window.innerWidth < 1024) window.setTimeout(() => document.getElementById('mission-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); }}>
                 <span className="m-ico"><Icon name={x.locked ? 'lock' : TYPE_ICON[x.type]} size={18} /></span>
-                <span className="m-txt"><b>{x.name}</b><small>{config.missionTypes[x.type].name}{x.clears > 0 ? ` · побед: ${x.clears}` : ''}</small></span>
+                <span className="m-txt"><b>{x.name}{x.id === recommended && <em className="rec">Рекомендуем</em>}</b><small>{config.missionTypes[x.type].name}{x.clears > 0 ? ` · побед: ${x.clears}` : ' · новая'}</small></span>
                 <span className="m-fuel"><ResIcon k="fuel" size={12} />{x.fuel}</span>
               </button>
             </li>
@@ -195,7 +197,17 @@ function BattleArena() {
                 );
               })}
             </div>
-            <p className="muted small">Энергия восстанавливается на 1 каждый ход. Ремонтный комплекс даёт бесплатные ремонты: {b.freeRepairs}.</p>
+            <details className="howto" open={b.turn < 2}>
+              <summary>Как играть в бою</summary>
+              <ul>
+                <li><b>Атака</b> — выстрел, стоит 1 энергию.</li>
+                <li><b>Залп</b> — мощный удар за 3 энергии.</li>
+                <li><b>Прицел</b> — следующий выстрел сильнее.</li>
+                <li><b>Защита</b> — смягчает удар и даёт +1 энергию.</li>
+                <li><b>Ремонт</b> — лечит; бесплатных ремонтов: {b.freeRepairs}.</li>
+              </ul>
+              <p className="muted small">Энергия восстанавливается на 1 каждый ход. Следите за прочностью: когда она мала, используйте ремонт.</p>
+            </details>
             <Btn variant="danger" icon="x" disabled={busy} onClick={() => setConfirm(true)}>Отступить</Btn>
           </>
         )}

@@ -298,3 +298,54 @@ test('представление: не раскрывает состав вра�
   assert.ok(!JSON.stringify(v).includes('"seed"'));
   assert.equal(v.resources.credits, 650);
 });
+
+test('обучение: шаги проверяет сервер, награда один раз, ветераны и пропуск', () => {
+  let s = createState(null, {}, T0);
+  assert.equal(s.tutorial.step, 0);
+  assert.equal(buildView(s, T0).tutorial.ready, true, 'приветственный шаг готов сразу');
+  const c0 = Math.floor(s.res.credits);
+  s = act(s, 'tutorial/claim', {}, T0);
+  assert.equal(s.tutorial.step, 1);
+  assert.equal(Math.floor(s.res.credits), c0 + D.TUTORIAL[0].reward.credits);
+  throwsCode(() => act(s, 'tutorial/claim', {}, T0), 'tutorial_not_ready'); // шаг «стройка» не выполнен
+  s = act(s, 'build/start', { buildingId: 'factory' }, T0);
+  s = act(s, 'tutorial/claim', {}, T0);
+  assert.equal(s.tutorial.step, 2);
+  throwsCode(() => act(s, 'tutorial/claim', {}, T0), 'tutorial_not_ready');
+  s = act(s, 'research/start', { techId: 'arm1' }, T0); s = act(s, 'tutorial/claim', {}, T0);
+  s = act(s, 'tank/upgrade', { tankId: 't34' }, T0); s = act(s, 'tutorial/claim', {}, T0);
+  throwsCode(() => act(s, 'tutorial/claim', {}, T0), 'tutorial_not_ready'); // нужна победа
+  s = act(s, 'battle/start', { missionId: 'r1', squad: ['t34'] }, T0);
+  s = playUntilDone(s, T0); s = act(s, 'battle/claim', { battleId: s.battle.id }, T0);
+  s = act(s, 'tutorial/claim', {}, T0);
+  const q = s.daily.quests[0]; q.progress = q.goal;
+  s = act(s, 'quest/claim', { questId: q.id }, T0);
+  s = act(s, 'tutorial/claim', {}, T0);
+  assert.equal(s.tutorial.done, true);
+  throwsCode(() => act(s, 'tutorial/claim', {}, T0), 'tutorial_done');
+  // пропуск и ветераны
+  const k = act(createState(null, {}, T0), 'tutorial/skip', {}, T0);
+  assert.equal(k.tutorial.done, true);
+  const old = createState(null, {}, T0); delete old.tutorial; old.stats.battles = 3;
+  assert.equal(E.settle(old, T0).tutorial.done, true, 'существующий игрок с прогрессом не получает обучение');
+  const fresh = createState(null, {}, T0); delete fresh.tutorial;
+  assert.equal(E.settle(fresh, T0).tutorial.done, false);
+  assert.equal(createState({ version: 1, tanks: {}, buildings: {}, credits: 5 }, {}, T0).tutorial.done, true, 'импорт старого сохранения');
+});
+
+test('ежедневный бонус: раз в сутки, серия растёт и сбрасывается', () => {
+  let s = createState(null, {}, T0);
+  assert.equal(buildView(s, T0).bonus.available, true);
+  const c0 = Math.floor(s.res.credits);
+  s = act(s, 'bonus/claim', {}, T0);
+  assert.equal(Math.floor(s.res.credits), c0 + D.DAILY_BONUS[0].credits);
+  throwsCode(() => act(s, 'bonus/claim', {}, T0 + 1000), 'already_claimed');
+  const d2 = T0 + 86_400_000;
+  assert.equal(buildView(s, d2).bonus.available, true);
+  s = act(s, 'bonus/claim', {}, d2);
+  assert.equal(s.bonus.streak, 2);
+  const d5 = d2 + 3 * 86_400_000; // пропуск дней — серия сбрасывается
+  assert.equal(buildView(s, d5).bonus.nextDay, 1);
+  s = act(s, 'bonus/claim', {}, d5);
+  assert.equal(s.bonus.streak, 1);
+});

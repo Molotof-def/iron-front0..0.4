@@ -29,7 +29,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
 // Ускорение таймеров только для локальной проверки; в production всегда 1.
 const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const MAX_BODY = 256 * 1024;
 // pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
 const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;

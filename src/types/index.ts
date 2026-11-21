@@ -22,7 +22,9 @@ export interface GameConfig {
   branches: Record<string, string>; missionTypes: Record<MissionType, { name: string; desc: string }>;
   arenas: Record<string, { name: string; desc: string }>; weather: Record<string, { name: string; desc: string }>;
   roles: Record<string, string>; achievements: AchievementCfg[]; resources: ResourceKey[]; levelGrowth: number;
+  tutorial: TutorialStepCfg[]; dailyBonus: (Cost & { xp?: number })[];
 }
+export interface TutorialStepCfg { id: string; title: string; text: string; screen: Screen; reward: Cost & { xp?: number } }
 
 export interface QueueItem { id: string; startedAt: number; endsAt: number }
 export interface BuildQueueItem extends QueueItem { building: BuildingId; toLevel: number; cost: Cost }
@@ -71,6 +73,8 @@ export interface GameView {
   buildings: BuildingView[]; buildQueue: BuildQueueItem[]; produceQueue: ProduceQueueItem[]; researchQueue: ResearchQueueItem[];
   tanks: TankView[]; techs: TechView[]; missions: MissionView[]; squad: string[]; battle: BattleView | null;
   quests: QuestView[]; questsResetAt: number; achievements: { id: string; value: number; claimed: boolean }[];
+  tutorial: { step: number; total: number; done: boolean; ready: boolean };
+  bonus: { available: boolean; streak: number; nextDay: number };
   stats: { battles: number; wins: number; losses: number; built: number; researched: number; upgrades: number; produced: number; bossWins: number };
   events: GameEvent[]; legacy: { importedAt: number } | null;
 }

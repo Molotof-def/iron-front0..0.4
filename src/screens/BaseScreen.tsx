@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { BaseScene } from '../components/BaseScene';
+import { DailyBonusPanel, TutorialPanel } from '../components/Guide';
 import { Icon } from '../components/Icon';
 import { Bar, Btn, Panel, TimerBar } from '../components/ui';
 import { useGame } from '../state/GameProvider';
@@ -60,6 +61,8 @@ export function BaseScreen() {
       </Panel>
 
       <div className="side-col">
+        <TutorialPanel />
+        <DailyBonusPanel />
         <Panel title="Что происходит сейчас" icon="clock">
           {active.length === 0 && <p className="muted">Все очереди свободны. Запустите строительство, исследование или производство.</p>}
           <ul className="jobs">

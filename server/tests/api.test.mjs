@@ -28,6 +28,12 @@ test('initData: валидная подпись принимается, подд
   assert.equal(validateInitData(ok, '', NOW), null);
 });
 
+test('initData: подпись с полем signature (новые клиенты Telegram) принимается', () => {
+  const withSig = sign({ user: userJson, auth_date: String(Math.floor(NOW / 1000)), signature: 'AbCdEf_-123', query_id: 'AAH1' });
+  assert.equal(validateInitData(withSig, TOKEN, NOW)?.id, '4242');
+  assert.equal(validateInitData(withSig, 'other:token', NOW), null);
+});
+
 test('dev-авторизация отключена в production', () => {
   assert.equal(devUser('player1', { production: true, allow: true }), null);
   assert.equal(devUser('player1', { production: false, allow: false }), null);

@@ -26,6 +26,8 @@ export function buildConfig() {
     achievements: D.ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, desc: a.desc, goal: a.goal, reward: a.reward })),
     resources: D.RESOURCES,
     levelGrowth: D.LEVEL_GROWTH,
+    tutorial: D.TUTORIAL.map((t) => ({ id: t.id, title: t.title, text: t.text, screen: t.screen, reward: t.reward })),
+    dailyBonus: D.DAILY_BONUS,
   };
 }
 
@@ -140,6 +142,8 @@ export function buildView(state, now, opts = {}) {
     buildings, buildQueue: state.buildQueue, produceQueue: state.produceQueue, researchQueue: state.researchQueue,
     tanks, techs, missions, squad: state.squad, battle: battleView(state.battle),
     quests, questsResetAt: E.nextDayAt(now), achievements,
+    tutorial: { step: state.tutorial.step, total: D.TUTORIAL.length, done: state.tutorial.done, ready: E.tutorialReady(state) },
+    bonus: E.bonusStatus(state, now),
     stats: state.stats, events: state.events, legacy: state.legacy ? { importedAt: state.legacy.importedAt } : null,
   };
 }

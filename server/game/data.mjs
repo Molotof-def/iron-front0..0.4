@@ -221,3 +221,17 @@ export const ACHIEVEMENTS = [
   { id: 'colonel', name: 'Полковник', desc: 'Достигните 10 уровня командира', metric: 'commander', goal: 10, reward: { credits: 1200, steel: 300 } },
   { id: 'mechanic', name: 'Механик-энтузиаст', desc: 'Улучшите танки 10 раз', metric: 'upgrades', goal: 10, reward: { credits: 350, scrap: 70 } },
 ];
+
+// ---------- Обучение и ежедневный бонус ----------
+export const TUTORIAL = [
+  { id: 'welcome', title: 'Примите командование', text: 'Ваша база готова к работе. Сверху — ресурсы: кредиты, сталь, металлолом, топливо и научные данные. Они копятся сами, даже когда вы не в игре.', screen: 'base', reward: { credits: 100, steel: 40 } },
+  { id: 'build', title: 'Улучшите здание', text: 'Откройте «Стройка», выберите здание и нажмите «Улучшить». Стройка идёт по реальному времени. Для начала подойдёт Завод — он даёт сталь.', screen: 'build', reward: { credits: 100, steel: 100 } },
+  { id: 'research', title: 'Начните исследование', text: 'Откройте «Наука» и запустите любое доступное исследование, например «Усиленные сплавы». Исследования дают постоянные бонусы всей технике.', screen: 'research', reward: { science: 60, credits: 80 } },
+  { id: 'tank', title: 'Пополните парк', text: 'В «Ангаре» выпустите новый танк или улучшите T-34. Машины разных классов играют по-разному: сравните их кнопкой «Сравнить».', screen: 'hangar', reward: { steel: 80, scrap: 30 } },
+  { id: 'battle', title: 'Выиграйте первый бой', text: 'В «Бою» выберите «Разведку рубежа» и нажмите «Начать бой». Атакуйте, а когда энергия кончается — используйте «Защиту», она возвращает заряд.', screen: 'battle', reward: { credits: 200, xp: 60, fuel: 10 } },
+  { id: 'quest', title: 'Заберите награду за задание', text: 'В «Заданиях» выполняйте ежедневные цели и забирайте награды. Выполните любое задание и нажмите «Забрать».', screen: 'quests', reward: { credits: 300, steel: 100, scrap: 40 } },
+];
+export const DAILY_BONUS = [
+  { credits: 100, fuel: 5 }, { credits: 150, steel: 60 }, { credits: 200, scrap: 40, fuel: 5 }, { credits: 250, steel: 120 },
+  { credits: 300, science: 40, fuel: 8 }, { credits: 400, steel: 150, scrap: 60 }, { credits: 800, steel: 300, scrap: 120, science: 80, fuel: 15 },
+];

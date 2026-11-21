@@ -26,7 +26,8 @@ export function newPlayer(now, nickname = 'Командир') {
     buildQueue: [], produceQueue: [], researchDone: [], researchQueue: [],
     tanks: { [D.STARTER_TANK]: { level: 1 } }, squad: [D.STARTER_TANK],
     battle: null, missionClears: {},
-    stats: { battles: 0, wins: 0, losses: 0, built: 0, researched: 0, upgrades: 0, produced: 0, bossWins: 0 },
+    stats: { battles: 0, wins: 0, losses: 0, built: 0, researched: 0, upgrades: 0, produced: 0, bossWins: 0, questsClaimed: 0 },
+    tutorial: { step: 0, done: false }, bonus: { lastDay: '', streak: 0 },
     daily: { day: '', quests: [] }, achievementsClaimed: [],
     events: [], eventSeq: 0, idSeq: 1, recent: [], legacy: null,
   };
@@ -117,6 +118,33 @@ const track = (state, tpl, n = 1) => {
 };
 export const questTemplate = (tpl) => D.QUEST_TEMPLATES.find((q) => q.tpl === tpl);
 
+// ---------- Миграция формата состояния «на лету» ----------
+function ensureProgress(state) {
+  state.stats.questsClaimed ??= 0;
+  state.bonus ??= { lastDay: '', streak: 0 };
+  if (!state.tutorial) {
+    const veteran = Boolean(state.legacy) || state.stats.battles > 0 || state.stats.built > 0;
+    state.tutorial = { step: veteran ? D.TUTORIAL.length : 0, done: veteran };
+  }
+}
+
+// ---------- Обучение ----------
+/** Выполнено ли условие текущего шага обучения. Проверяется только по серверному состоянию. */
+export function tutorialReady(state) {
+  const t = state.tutorial;
+  if (!t || t.done) return false;
+  const st = state.stats;
+  switch (D.TUTORIAL[t.step]?.id) {
+    case 'welcome': return true;
+    case 'build': return st.built > 0 || state.buildQueue.length > 0;
+    case 'research': return state.researchDone.length > 0 || state.researchQueue.length > 0;
+    case 'tank': return st.produced > 0 || st.upgrades > 0 || state.produceQueue.length > 0;
+    case 'battle': return st.wins > 0;
+    case 'quest': return st.questsClaimed > 0;
+    default: return false;
+  }
+}
+
 // ---------- Таймеры и накопление ----------
 function accrue(state, from, to) {
   if (to <= from) return;
@@ -164,6 +192,7 @@ export function settle(state, now) {
   }
   accrue(state, cursor, now);
   state.lastTick = now;
+  ensureProgress(state);
   ensureDaily(state, now);
   return state;
 }
@@ -359,6 +388,7 @@ function claimQuest(state, ctx, { questId }) {
   if (q.claimed) fail('already_claimed', 'Награда уже получена.', 409);
   if (q.progress < q.goal) fail('not_done', 'Задание ещё не выполнено.');
   q.claimed = true;
+  state.stats.questsClaimed += 1;
   const reward = questTemplate(q.tpl).reward(q.goal);
   giveReward(state, reward, ctx.now);
   pushEvent(state, 'reward', `Задание «${questTemplate(q.tpl).name}» выполнено.`, ctx.now);
@@ -388,6 +418,38 @@ function claimAchievement(state, ctx, { achievementId }) {
   pushEvent(state, 'reward', `Достижение «${a.name}» получено.`, ctx.now);
 }
 
+function claimTutorial(state, ctx) {
+  const t = state.tutorial;
+  if (t.done) fail('tutorial_done', 'Обучение уже завершено.', 409);
+  if (!tutorialReady(state)) fail('tutorial_not_ready', 'Сначала выполните шаг обучения.');
+  const step = D.TUTORIAL[t.step];
+  giveReward(state, step.reward, ctx.now);
+  t.step += 1;
+  if (t.step >= D.TUTORIAL.length) { t.done = true; pushEvent(state, 'reward', 'Обучение завершено. Вы готовы к настоящей войне, командир!', ctx.now); }
+  else pushEvent(state, 'reward', `Обучение: «${step.title}» выполнено.`, ctx.now);
+}
+function skipTutorial(state) {
+  if (state.tutorial.done) fail('tutorial_done', 'Обучение уже завершено.', 409);
+  state.tutorial.done = true; state.tutorial.step = D.TUTORIAL.length;
+}
+export function bonusStatus(state, now) {
+  const today = dayKey(now);
+  const yesterday = dayKey(now - DAY);
+  const b = state.bonus;
+  const available = b.lastDay !== today;
+  const streak = b.lastDay === today ? b.streak : b.lastDay === yesterday ? b.streak : 0;
+  return { available, streak, nextDay: (streak % D.DAILY_BONUS.length) + 1 };
+}
+function claimBonus(state, ctx) {
+  const st = bonusStatus(state, ctx.now);
+  if (!st.available) fail('already_claimed', 'Ежедневный бонус уже получен. Возвращайтесь завтра.', 409);
+  state.bonus.streak = st.streak + 1;
+  state.bonus.lastDay = dayKey(ctx.now);
+  const reward = D.DAILY_BONUS[(state.bonus.streak - 1) % D.DAILY_BONUS.length];
+  giveReward(state, reward, ctx.now);
+  pushEvent(state, 'reward', `Ежедневный бонус: день ${((state.bonus.streak - 1) % D.DAILY_BONUS.length) + 1}.`, ctx.now);
+}
+
 const NICK = /^[\p{L}\p{N} _.\-]{2,18}$/u;
 function setNickname(state, ctx, { nickname }) {
   const n = String(nickname ?? '').replace(/\s+/g, ' ').trim();
@@ -400,7 +462,7 @@ const HANDLERS = {
   'tank/produce': produceTank, 'tank/produce-cancel': cancelProduction, 'tank/upgrade': upgradeTank, 'squad/set': setSquad,
   'research/start': startResearch, 'research/cancel': cancelResearch,
   'battle/start': startBattle, 'battle/action': battleAction, 'battle/claim': claimBattle,
-  'quest/claim': claimQuest, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
+  'quest/claim': claimQuest, 'tutorial/claim': claimTutorial, 'tutorial/skip': skipTutorial, 'bonus/claim': claimBonus, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
 };
 export const ACTION_NAMES = Object.keys(HANDLERS);
 

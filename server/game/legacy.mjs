@@ -42,6 +42,7 @@ export function migrateLegacy(legacy, profile, now) {
   s.stats.researched = s.researchDone.length;
   s.stats.upgrades = Math.floor(num(legacy.missions?.upgrades, 0, 100_000, 0));
   s.legacy = { importedAt: now, source: 'player_saves', version: 1 };
+  s.tutorial = { step: D.TUTORIAL.length, done: true };
   pushEvent(s, 'info', 'Прогресс из версии 0.4.0 перенесён в новую базу. Старые данные сохранены.', now);
   settle(s, now);
   return s;

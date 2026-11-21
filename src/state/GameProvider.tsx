@@ -2,12 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
 import { haptic } from '../lib/telegram';
-import type { GameConfig, GameView } from '../types';
+import type { GameConfig, GameEvent, GameView } from '../types';
 
 export interface Toast { id: number; kind: 'ok' | 'err' | 'info'; text: string }
 interface Ctx {
   config: GameConfig; view: GameView; busy: boolean; toasts: Toast[]; unread: number;
-  now: () => number; tick: number;
+  now: () => number; tick: number; away: GameEvent[]; clearAway: () => void;
   act: (action: string, payload?: Record<string, unknown>, okText?: string) => Promise<GameView | null>;
   refresh: () => Promise<void>; markSeen: () => void; dismiss: (id: number) => void; notify: (kind: Toast['kind'], text: string) => void;
 }
@@ -29,6 +29,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [tick, setTick] = useState(0);
   const [seen, setSeen] = useState(readSeen);
+  const [away, setAway] = useState<GameEvent[]>([]);
   const offset = useRef(0);
   const toastId = useRef(1);
   const inflight = useRef(false);
@@ -50,6 +51,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     try {
       const [config, view] = await Promise.all([api.config(), api.state()]);
       offset.current = view.serverTime - Date.now();
+      const last = readSeen();
+      if (last > 0) setAway(view.events.filter((e) => e.id > last).slice(0, 8)); // «Пока вас не было»
       setBoot({ phase: 'ready', config, view });
     } catch (e) {
       const err = e as ApiError;
@@ -118,8 +121,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Ctx | null>(() => {
     if (boot.phase !== 'ready') return null;
     const unread = boot.view.events.filter((e) => e.id > seen).length;
-    return { config: boot.config, view: boot.view, busy, toasts, unread, now, tick, act, refresh, markSeen, dismiss, notify };
-  }, [boot, busy, toasts, seen, now, tick, act, refresh, markSeen, dismiss, notify]);
+    const clearAway = () => setAway([]);
+    return { config: boot.config, view: boot.view, busy, toasts, unread, now, tick, away, clearAway, act, refresh, markSeen, dismiss, notify };
+  }, [boot, busy, toasts, seen, now, tick, away, act, refresh, markSeen, dismiss, notify]);
 
   if (boot.phase === 'loading') return <div className="boot"><div className="boot-mark">IRON FRONT</div><div className="boot-bar"><i /></div><p>Связь с командованием…</p></div>;
   if (boot.phase === 'error' || !value) {

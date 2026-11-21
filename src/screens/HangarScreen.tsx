@@ -4,7 +4,7 @@ import { TankArt } from '../components/TankArt';
 import { Bar, Btn, ClassBadge, CostList, Empty, Modal, Panel, StatRow, TimerBar } from '../components/ui';
 import { useGame } from '../state/GameProvider';
 import { useNav } from '../state/nav';
-import { duration, rarityClass } from '../lib/format';
+import { duration, focusPanel, rarityClass } from '../lib/format';
 import type { TankClass, TankCfg, TankView } from '../types';
 
 type Filter = 'all' | 'owned' | 'available' | TankClass;
@@ -34,7 +34,7 @@ export function HangarScreen() {
 
   return (
     <div className="screen hangar-grid">
-      <Panel className="selected" title={cur.c.name} icon="hangar" right={<span className="muted small">Парк {view.base.garage.used}/{view.base.garage.capacity}</span>}>
+      <Panel id="tank-detail" className="selected" title={cur.c.name} icon="hangar" right={<span className="muted small">Парк {view.base.garage.used}/{view.base.garage.capacity}</span>}>
         <div className={`showcase ${rarityClass(cur.c.rarity)}`}>
           <TankArt cls={cur.c.class} shape={cur.c.shape} rarity={cur.c.rarity} size={300} />
         </div>
@@ -54,7 +54,7 @@ export function HangarScreen() {
           <ul className="cards">
             {shown.map(({ c, v }) => (
               <li key={c.id}>
-                <button className={`tcard ${sel === c.id ? 'on' : ''} ${rarityClass(c.rarity)} ${v.owned ? '' : 'unowned'}`} onClick={() => setSel(c.id)}>
+                <button className={`tcard ${sel === c.id ? 'on' : ''} ${rarityClass(c.rarity)} ${v.owned ? '' : 'unowned'}`} onClick={() => { setSel(c.id); focusPanel('tank-detail'); }}>
                   <TankArt cls={c.class} shape={c.shape} size={112} />
                   <span className="tc-name">{c.name}</span>
                   <span className="tc-meta"><ClassBadge cls={c.class} />{v.owned ? <b>Ур. {v.level}</b> : v.producing ? <b className="amber">Строится</b> : v.problem ? <Icon name="lock" size={13} /> : <b className="olive">Доступен</b>}{view.squad.includes(c.id) && <Icon name="flag" size={13} className="in-squad" />}</span>
