@@ -6,6 +6,7 @@ import { validateInitData, devUser, createRateLimiter } from './auth.mjs';
 import { runMigrations } from './db/migrations.mjs';
 import { createPgStore } from './store/pg-store.mjs';
 import { createFileStore } from './store/file-store.mjs';
+import { withEnsure } from './store/with-ensure.mjs';
 import { createGameApi, summarize } from './api.mjs';
 import { createNotifier } from './notifier.mjs';
 import { createState } from './game/legacy.mjs';
@@ -30,7 +31,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
 // Ускорение таймеров только для локальной проверки; в production всегда 1.
 const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
-const VERSION = '2.2.0';
+const VERSION = '2.2.1';
 const MAX_BODY = 256 * 1024;
 // pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
 const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;
@@ -175,12 +176,7 @@ const storeDeps = { createState, summarize, qualifyLevel: 3 };
 let gameStore = null;
 if (pool) {
   const pgStore = createPgStore(pool, storeDeps);
-  gameStore = {
-    kind: pgStore.kind,
-    transact: async (...args) => { await ensureDatabase(); return pgStore.transact(...args); },
-    leaderboard: async (...args) => { await ensureDatabase(); return pgStore.leaderboard(...args); },
-    rankOf: async (...args) => { await ensureDatabase(); return pgStore.rankOf(...args); },
-  };
+  gameStore = withEnsure(pgStore, ensureDatabase);
 } else if (!IS_PROD) {
   gameStore = createFileStore(resolve(root, 'data', 'dev-store.json'), storeDeps);
   console.log('[game] DATABASE_URL не задан — используется локальный файл data/dev-store.json (только для разработки).');
@@ -269,6 +265,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { error: 'not_found' });
   } catch (error) {
     console.error('[api]', error);
+    if (!error.status || error.status >= 500) console.error(`[server] ${req.method} ${url?.pathname ?? ''}:`, String(error?.stack || error).split('\n').slice(0, 4).join(' | ').slice(0, 600));
     return send(res, error.status || 500, { error: error.status === 400 ? 'invalid_request' : 'internal_error', message: error.status ? error.message : 'Внутренняя ошибка сервера.' });
   }
 });
