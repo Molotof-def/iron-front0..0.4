@@ -42,6 +42,22 @@ export const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS iron_events_player_idx ON iron_events (telegram_id, created_at DESC);
     `,
   },
+  {
+    version: 3,
+    name: 'notifications_and_referrals',
+    sql: `
+      ALTER TABLE iron_players ADD COLUMN IF NOT EXISTS next_event_at BIGINT;
+      ALTER TABLE iron_players ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+      CREATE INDEX IF NOT EXISTS iron_players_notify_idx ON iron_players (next_event_at) WHERE next_event_at IS NOT NULL AND notify_enabled;
+      CREATE TABLE IF NOT EXISTS iron_referrals (
+        invitee BIGINT PRIMARY KEY,
+        referrer BIGINT NOT NULL,
+        qualified BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS iron_referrals_referrer_idx ON iron_referrals (referrer);
+    `,
+  },
 ];
 
 const LOCK_KEY = 872_001; // произвольный ключ advisory-lock: два экземпляра не мигрируют одновременно

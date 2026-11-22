@@ -10,7 +10,7 @@ const rngFixed = (v = 0.5) => () => v;
 const act = (state, action, payload, now, extra = {}) => E.perform(state, action, payload, { now, rng: rngFixed(), ...extra });
 
 test('каталог: целостность данных', () => {
-  assert.equal(D.TANKS.length, 27);
+  assert.equal(D.TANKS.length, 32);
   assert.equal(new Set(D.TANKS.map((t) => t.id)).size, D.TANKS.length);
   for (const cls of ['light', 'medium', 'heavy', 'td', 'arty']) assert.ok(D.TANKS.some((t) => t.class === cls), cls);
   for (const t of D.TECHS) { if (t.req) assert.ok(D.TECH_BY_ID[t.req], `req ${t.id}`); }

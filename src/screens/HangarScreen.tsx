@@ -36,7 +36,7 @@ export function HangarScreen() {
     <div className="screen hangar-grid">
       <Panel id="tank-detail" className="selected" title={cur.c.name} icon="hangar" right={<span className="muted small">Парк {view.base.garage.used}/{view.base.garage.capacity}</span>}>
         <div className={`showcase ${rarityClass(cur.c.rarity)}`}>
-          <TankArt cls={cur.c.class} shape={cur.c.shape} rarity={cur.c.rarity} size={300} />
+          <TankArt cls={cur.c.class} shape={cur.c.shape} rarity={cur.c.rarity} size={300} idle />
         </div>
         <div className="tags"><ClassBadge cls={cur.c.class} /><span className={`chip ${rarityClass(cur.c.rarity)}`}>{cur.c.rarity}</span><span className="chip">{cur.c.country}</span><span className="chip">Ур. техники {cur.c.tier}</span></div>
         <p className="muted">{cur.c.desc}</p>

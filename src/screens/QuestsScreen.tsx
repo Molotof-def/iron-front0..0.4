@@ -1,5 +1,6 @@
 import { Icon } from '../components/Icon';
 import { Bar, Btn, Panel, ResIcon } from '../components/ui';
+import { WeeklyPanel } from '../components/Social';
 import { useGame } from '../state/GameProvider';
 import { costEntries, duration, num } from '../lib/format';
 import type { Cost } from '../types';
@@ -18,6 +19,7 @@ export function QuestsScreen() {
   const left = Math.max(0, (view.questsResetAt - now()) / 1000);
   return (
     <div className="screen quests-grid">
+      <WeeklyPanel />
       <Panel title="Ежедневные задания" icon="quests" right={<span className="muted small"><Icon name="clock" size={13} /> Обновление через {duration(left)}</span>}>
         <ul className="qlist">
           {view.quests.map((q) => {

@@ -28,6 +28,7 @@ export function buildConfig() {
     levelGrowth: D.LEVEL_GROWTH,
     tutorial: D.TUTORIAL.map((t) => ({ id: t.id, title: t.title, text: t.text, screen: t.screen, reward: t.reward })),
     dailyBonus: D.DAILY_BONUS,
+    referral: { qualifyLevel: D.REFERRAL.qualifyLevel, perFriend: D.REFERRAL.perFriend, welcome: D.REFERRAL.welcome },
   };
 }
 
@@ -144,6 +145,9 @@ export function buildView(state, now, opts = {}) {
     quests, questsResetAt: E.nextDayAt(now), achievements,
     tutorial: { step: state.tutorial.step, total: D.TUTORIAL.length, done: state.tutorial.done, ready: E.tutorialReady(state) },
     bonus: E.bonusStatus(state, now),
+    weekly: E.weeklyStatus(state, now),
+    notify: state.notify.enabled,
+    referral: { ...E.referralStatus(state, opts.referral), link: opts.referralLink || null, welcomed: state.referral.welcomed },
     stats: state.stats, events: state.events, legacy: state.legacy ? { importedAt: state.legacy.importedAt } : null,
   };
 }

@@ -7,6 +7,7 @@ import { runMigrations } from './db/migrations.mjs';
 import { createPgStore } from './store/pg-store.mjs';
 import { createFileStore } from './store/file-store.mjs';
 import { createGameApi, summarize } from './api.mjs';
+import { createNotifier } from './notifier.mjs';
 import { createState } from './game/legacy.mjs';
 
 const root = process.cwd();
@@ -29,7 +30,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
 // Ускорение таймеров только для локальной проверки; в production всегда 1.
 const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const MAX_BODY = 256 * 1024;
 // pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
 const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;
@@ -44,6 +45,7 @@ const pool = DATABASE_URL ? new Pool({
 let dbReady = false;
 let dbError = '';
 let botState = TOKEN ? 'starting' : 'not_configured';
+let botUsername = process.env.BOT_USERNAME || '';
 let lastBotError = '';
 
 const mime = {
@@ -113,7 +115,13 @@ async function handleTelegramUpdate(update) {
   const msg = update?.message;
   if (!msg?.text) return;
   if (/^\/start(?:@\w+)?(?:\s|$)/i.test(msg.text)) {
-    const reply = { chat_id: msg.chat.id, text: greeting(msg.from?.first_name || 'командир') };
+    // Реферальная ссылка вида /start ref_<id>: личность приглашённого берётся из Telegram (msg.from.id), а не из текста.
+    const ref = /^\/start(?:@\w+)?\s+ref_(\d{3,15})$/i.exec(msg.text.trim());
+    let invited = false;
+    if (ref && gameStore?.recordReferral && msg.from?.id) {
+      try { invited = await gameStore.recordReferral(String(msg.from.id), ref[1]); } catch (error) { console.warn('[referral]', String(error.message).slice(0, 120)); }
+    }
+    const reply = { chat_id: msg.chat.id, text: greeting(msg.from?.first_name || 'командир') + (invited ? '\n\n🤝 Вас пригласил друг — бонус за приглашение ждёт в игре!' : '') };
     if (MINI_APP_URL) reply.reply_markup = { inline_keyboard: [[{ text: '🎮 Открыть IRON FRONT', web_app: { url: MINI_APP_URL } }]] };
     await telegram('sendMessage', reply);
   } else if (/^\/(help|about)(?:@\w+)?$/i.test(msg.text)) {
@@ -125,6 +133,7 @@ async function startBot() {
     if (!TOKEN) console.log('[bot] TELEGRAM_BOT_TOKEN не задан — бот не запущен.');
     return;
   }
+  try { botUsername = botUsername || (await telegram('getMe')).username || ''; } catch (error) { console.warn('[bot] getMe:', String(error.message).slice(0, 120)); }
   if (USE_WEBHOOK) {
     try {
       await telegram('setWebhook', { url: `${PUBLIC_URL.replace(/\/$/, '')}/api/telegram/webhook`, secret_token: WEBHOOK_SECRET, allowed_updates: ['message'], drop_pending_updates: false });
@@ -162,7 +171,7 @@ async function startBot() {
   }
 }
 
-const storeDeps = { createState, summarize };
+const storeDeps = { createState, summarize, qualifyLevel: 3 };
 let gameStore = null;
 if (pool) {
   const pgStore = createPgStore(pool, storeDeps);
@@ -177,7 +186,7 @@ if (pool) {
   console.log('[game] DATABASE_URL не задан — используется локальный файл data/dev-store.json (только для разработки).');
 }
 const gameApi = createGameApi({
-  store: gameStore, authenticate: authenticatedUser, limiter: createRateLimiter({ windowMs: 10_000, max: 60 }), timeScale: TIME_SCALE,
+  store: gameStore, authenticate: authenticatedUser, botUsername: () => botUsername || null, limiter: createRateLimiter({ windowMs: 10_000, max: 60 }), timeScale: TIME_SCALE,
 });
 
 const server = http.createServer(async (req, res) => {
@@ -268,7 +277,24 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[api] IRON FRONT ${VERSION} listening on ${PORT}`);
   ensureDatabase().catch((error) => { dbError = String(error.message).slice(0, 180); console.error('[db] миграции не выполнены:', dbError); });
   startBot();
+  startNotifier();
 });
+
+// Уведомления о завершённых таймерах: раз в 30 секунд, только при настроенном боте и базе.
+function startNotifier() {
+  if (!TOKEN || !gameStore || process.env.DISABLE_NOTIFICATIONS === 'true') return;
+  const send = (chatId, text) => {
+    const payload = { chat_id: chatId, text: `${text}\n\nШтаб ждёт вашего приказа, командир!`, disable_notification: false };
+    if (MINI_APP_URL) payload.reply_markup = { inline_keyboard: [[{ text: '🎮 Открыть IRON FRONT', web_app: { url: MINI_APP_URL } }]] };
+    return telegram('sendMessage', payload);
+  };
+  const notifier = createNotifier({ store: gameStore, send });
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return; busy = true;
+    try { await notifier.tick(); } catch (error) { console.error('[notify]', String(error.message).slice(0, 160)); } finally { busy = false; }
+  }, 30_000).unref();
+}
 
 async function shutdown() {
   server.close();

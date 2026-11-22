@@ -25,3 +25,13 @@ console.log('— начало (ур.3, Т-34 ур.2)'); for (const m of ['r1', '
 console.log('— середина (ур.9, отряд 3)'); for (const m of ['r3', 'd2', 'c2', 'b1']) console.log(run(mid, m, ['tiger', 't72', 'su100']));
 for (const m of ['d3', 'c3']) console.log(run(mid, m, ['tiger', 't72', 'su100']));
 console.log('— поздняя (ур.18)'); for (const m of ['b2', 'b3']) console.log(run(late, m, ['abrams', 't90', 'merkava']));
+const high = { lvl: 30, b: { hq: 10, hangar: 10, training: 10, radar: 9, repair: 8 }, tech: D.TECHS.map((t) => t.id), tanks: { t14: 12, k2: 12, abrams: 12, pzh: 12, challenger: 12, merkava: 12, t90: 12 } };
+const upper = { lvl: 16, b: { hq: 9, hangar: 8, training: 8, radar: 6, repair: 6 }, tech: ['arm1', 'arm2', 'arm3', 'wpn1', 'wpn2', 'wpn3', 'eng1', 'eng2', 'eng3'], tanks: { abrams: 10, t90: 10, merkava: 10, tiger: 10, pershing: 10, cv90: 10, jagd: 10 } };
+console.log('— высокий уровень');
+console.log(run(upper, 'r4', ['abrams', 't90', 'cv90']), '(ур.16)');
+console.log(run(upper, 'd4', ['abrams', 't90', 'merkava']), '(ур.16)');
+console.log(run(upper, 't4', ['tiger', 'pershing']), '(ур.16)');
+console.log(run(upper, 'c4', ['abrams', 't90', 'jagd']), '(ур.16)');
+console.log(run(high, 'b4', ['t14', 'k2', 'abrams']), '(ур.30)');
+console.log(run(high, 'b5', ['t14', 'k2', 'pzh']), '(ур.30)');
+console.log(run(high, 'b5', ['t14', 'abrams', 'challenger']), '(ур.30)');

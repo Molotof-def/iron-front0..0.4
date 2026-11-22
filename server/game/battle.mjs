@@ -239,7 +239,7 @@ export function retreat(b) {
 }
 
 /** Награда. Считается один раз при завершении боя; выдаётся при /battle/claim. */
-export function computeReward(mission, b, bonuses, trainingLevel, firstClear) {
+export function computeReward(mission, b, bonuses, trainingLevel, firstClear, eventMul = 1) {
   const empty = { credits: 0, scrap: 0, steel: 0, science: 0, xp: 0, fuel: 0 };
   if (b.status === 'retreated') return { ...empty, bonus: false, firstClear: false };
   const won = b.status === 'won';
@@ -252,13 +252,13 @@ export function computeReward(mission, b, bonuses, trainingLevel, firstClear) {
     if (mission.bonus?.turns) bonusDone = b.turn <= mission.bonus.turns;
     if (mission.bonus?.noLoss) bonusDone = b.lost === 0;
   }
-  const bonusMul = bonusDone ? 1.2 : 1;
+  const bonusMul = (bonusDone ? 1.2 : 1) * eventMul;
   const firstMul = won && firstClear ? 1.5 : 1;
   const k = won ? 1 : 0.25;
   reward.credits = Math.round(base.credits * k * rewardMul * bonusMul * firstMul);
   reward.scrap = Math.round(base.scrap * k * rewardMul * bonusMul);
   reward.steel = won ? Math.round(base.steel * rewardMul * bonusMul) : 0;
-  reward.science = Math.round(base.science * (won ? 1 : 0.2));
-  reward.xp = Math.round(base.xp * (won ? 1 : 0.2) * xpMul * firstMul);
-  return { ...reward, bonus: bonusDone, firstClear: won && firstClear };
+  reward.science = Math.round(base.science * (won ? 1 : 0.2) * eventMul);
+  reward.xp = Math.round(base.xp * (won ? 1 : 0.2) * xpMul * firstMul * eventMul);
+  return { ...reward, bonus: bonusDone, firstClear: won && firstClear, event: eventMul > 1 };
 }

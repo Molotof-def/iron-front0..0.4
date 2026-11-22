@@ -28,6 +28,7 @@ export function newPlayer(now, nickname = 'Командир') {
     battle: null, missionClears: {},
     stats: { battles: 0, wins: 0, losses: 0, built: 0, researched: 0, upgrades: 0, produced: 0, bossWins: 0, questsClaimed: 0 },
     tutorial: { step: 0, done: false }, bonus: { lastDay: '', streak: 0 },
+    notify: { enabled: true, upTo: 0 }, referral: { welcomed: false, claimed: 0, milestones: [] }, weekly: { week: -1, progress: 0, claimed: false },
     daily: { day: '', quests: [] }, achievementsClaimed: [],
     events: [], eventSeq: 0, idSeq: 1, recent: [], legacy: null,
   };
@@ -121,12 +122,43 @@ export const questTemplate = (tpl) => D.QUEST_TEMPLATES.find((q) => q.tpl === tp
 // ---------- Миграция формата состояния «на лету» ----------
 function ensureProgress(state) {
   state.stats.questsClaimed ??= 0;
+  state.notify ??= { enabled: true, upTo: state.eventSeq }; // старым игрокам не шлём уведомления о прошлом
+  state.referral ??= { welcomed: false, claimed: 0, milestones: [] };
+  state.weekly ??= { week: -1, progress: 0, claimed: false };
   state.bonus ??= { lastDay: '', streak: 0 };
   if (!state.tutorial) {
     const veteran = Boolean(state.legacy) || state.stats.battles > 0 || state.stats.built > 0;
     state.tutorial = { step: veteran ? D.TUTORIAL.length : 0, done: veteran };
   }
 }
+
+// ---------- Недельное событие и цель ----------
+function ensureWeekly(state, now) {
+  const w = D.weekIndex(now);
+  if (state.weekly.week !== w) state.weekly = { week: w, progress: 0, claimed: false };
+}
+export function weeklyStatus(state, now) {
+  const ev = D.eventForWeek(now);
+  return { event: ev, endsAt: D.weekEndsAt(now), progress: state.weekly.progress, goal: D.WEEKLY_GOAL.wins, claimed: state.weekly.claimed, reward: D.WEEKLY_GOAL.reward };
+}
+
+// ---------- Уведомления бота ----------
+const NOTIFY_ICON = { build: '🏗', produce: '🛠', research: '🔬' };
+/** Время ближайшего завершения таймера (для планировщика уведомлений) или null. */
+export function nextEventAt(state) {
+  const ends = [...state.buildQueue, ...state.produceQueue, ...state.researchQueue].map((q) => q.endsAt);
+  return ends.length ? Math.min(...ends) : null;
+}
+/** Забирает ещё не отправленные уведомления о завершённых таймерах и помечает их отправленными. */
+export function takeNotifications(state) {
+  const n = state.notify;
+  const fresh = state.events.filter((e) => e.id > n.upTo && NOTIFY_ICON[e.kind]).reverse();
+  n.upTo = state.eventSeq;
+  if (!n.enabled || !fresh.length) return [];
+  return fresh.map((e) => `${NOTIFY_ICON[e.kind]} ${e.text}`);
+}
+/** Игрок сейчас в игре и видит события сам — уведомления о них не нужны. */
+export const markEventsSeen = (state) => { state.notify.upTo = state.eventSeq; };
 
 // ---------- Обучение ----------
 /** Выполнено ли условие текущего шага обучения. Проверяется только по серверному состоянию. */
@@ -194,6 +226,7 @@ export function settle(state, now) {
   state.lastTick = now;
   ensureProgress(state);
   ensureDaily(state, now);
+  ensureWeekly(state, now);
   return state;
 }
 
@@ -347,11 +380,13 @@ function finishBattle(state, ctx) {
   const b = state.battle; const mission = D.MISSION_BY_ID[b.missionId];
   const won = b.status === 'won';
   const first = won && !state.missionClears[mission.id];
-  b.reward = B.computeReward(mission, b, bonusesOf(state), state.buildings.training, first);
+  const ev = D.eventForWeek(ctx.now);
+  b.reward = B.computeReward(mission, b, bonusesOf(state), state.buildings.training, first, ev.types.includes(mission.type) ? ev.mul : 1);
   state.stats.battles += 1;
   track(state, 'battles');
   if (won) {
     state.stats.wins += 1;
+    state.weekly.progress = Math.min(D.WEEKLY_GOAL.wins, state.weekly.progress + 1);
     state.missionClears[mission.id] = (state.missionClears[mission.id] || 0) + 1;
     track(state, 'wins');
     if (mission.type === 'recon') track(state, 'recon');
@@ -450,6 +485,45 @@ function claimBonus(state, ctx) {
   pushEvent(state, 'reward', `Ежедневный бонус: день ${((state.bonus.streak - 1) % D.DAILY_BONUS.length) + 1}.`, ctx.now);
 }
 
+function claimWeekly(state, ctx) {
+  const w = state.weekly;
+  if (w.claimed) fail('already_claimed', 'Награда недели уже получена.', 409);
+  if (w.progress < D.WEEKLY_GOAL.wins) fail('not_done', 'Недельная цель ещё не выполнена.');
+  w.claimed = true;
+  giveReward(state, D.WEEKLY_GOAL.reward, ctx.now);
+  pushEvent(state, 'reward', 'Награда недельной цели получена.', ctx.now);
+}
+function setNotify(state, ctx, { enabled }) {
+  state.notify.enabled = Boolean(enabled);
+  state.notify.upTo = state.eventSeq;
+}
+/** Приветственный бонус приглашённому: выдаётся один раз при первом входе после перехода по ссылке друга. */
+export function applyReferralWelcome(state, now) {
+  if (state.referral.welcomed) return false;
+  state.referral.welcomed = true;
+  giveReward(state, D.REFERRAL.welcome, now);
+  pushEvent(state, 'reward', 'Бонус за приглашение друга получен.', now);
+  return true;
+}
+export function referralStatus(state, stats) {
+  const qualified = Math.min(stats?.qualified ?? 0, D.REFERRAL.maxCounted);
+  return {
+    invited: stats?.invited ?? 0, qualified, claimed: state.referral.claimed,
+    claimable: Math.max(0, qualified - state.referral.claimed),
+    milestones: D.REFERRAL.milestones.map((m) => ({ at: m.at, reward: m.reward, reached: qualified >= m.at, claimed: state.referral.milestones.includes(m.at) })),
+  };
+}
+function claimReferral(state, ctx) {
+  const st = referralStatus(state, ctx.referral);
+  const fresh = st.claimable;
+  const ready = D.REFERRAL.milestones.filter((m) => st.qualified >= m.at && !state.referral.milestones.includes(m.at));
+  if (fresh <= 0 && !ready.length) fail('nothing_to_claim', 'Пока нечего забирать: друзья должны достичь 3 уровня командира.');
+  for (let i = 0; i < fresh; i++) giveReward(state, D.REFERRAL.perFriend, ctx.now);
+  for (const m of ready) { giveReward(state, m.reward, ctx.now); state.referral.milestones.push(m.at); }
+  state.referral.claimed = st.qualified;
+  pushEvent(state, 'reward', `Награды за друзей получены (друзей: ${fresh}${ready.length ? `, вех: ${ready.length}` : ''}).`, ctx.now);
+}
+
 const NICK = /^[\p{L}\p{N} _.\-]{2,18}$/u;
 function setNickname(state, ctx, { nickname }) {
   const n = String(nickname ?? '').replace(/\s+/g, ' ').trim();
@@ -462,7 +536,7 @@ const HANDLERS = {
   'tank/produce': produceTank, 'tank/produce-cancel': cancelProduction, 'tank/upgrade': upgradeTank, 'squad/set': setSquad,
   'research/start': startResearch, 'research/cancel': cancelResearch,
   'battle/start': startBattle, 'battle/action': battleAction, 'battle/claim': claimBattle,
-  'quest/claim': claimQuest, 'tutorial/claim': claimTutorial, 'tutorial/skip': skipTutorial, 'bonus/claim': claimBonus, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
+  'quest/claim': claimQuest, 'weekly/claim': claimWeekly, 'profile/notify': setNotify, 'referral/claim': claimReferral, 'tutorial/claim': claimTutorial, 'tutorial/skip': skipTutorial, 'bonus/claim': claimBonus, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
 };
 export const ACTION_NAMES = Object.keys(HANDLERS);
 
@@ -473,12 +547,13 @@ export const ACTION_NAMES = Object.keys(HANDLERS);
 export function perform(state, action, payload, opts) {
   const handler = HANDLERS[action];
   if (!handler) fail('unknown_action', 'Неизвестное действие.', 404);
-  const ctx = { now: opts.now, rng: opts.rng || Math.random, timeScale: opts.timeScale || 1 };
+  const ctx = { now: opts.now, rng: opts.rng || Math.random, timeScale: opts.timeScale || 1, referral: opts.referral || null };
   const next = structuredClone(state);
   settle(next, ctx.now);
   const requestId = typeof opts.requestId === 'string' && /^[\w-]{8,64}$/.test(opts.requestId) ? opts.requestId : null;
   if (requestId && next.recent.includes(requestId)) fail('duplicate_request', 'Запрос уже был обработан.', 409);
   handler(next, ctx, payload && typeof payload === 'object' ? payload : {});
+  markEventsSeen(next);
   if (requestId) { next.recent.unshift(requestId); next.recent.length = Math.min(next.recent.length, RECENT_LIMIT); }
   return next;
 }

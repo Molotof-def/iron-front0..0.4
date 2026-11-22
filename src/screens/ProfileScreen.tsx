@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { Bar, Btn, Panel } from '../components/ui';
+import { NotifyPanel, ReferralPanel } from '../components/Social';
 import { useGame } from '../state/GameProvider';
 import { num, timeAgo } from '../lib/format';
 import type { LeaderRow } from '../types';
@@ -38,6 +39,8 @@ export function ProfileScreen() {
         {view.legacy && <p className="muted small">Прогресс из версии 0.4.0 перенесён. Старое сохранение осталось нетронутым в базе.</p>}
       </Panel>
 
+      <ReferralPanel />
+      <NotifyPanel />
       <Panel title="Статистика" icon="trophy">
         <dl className="kv">
           <div><dt>Сражений</dt><dd>{num(view.stats.battles)}</dd></div>

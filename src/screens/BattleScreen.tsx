@@ -120,30 +120,33 @@ function MissionBoard() {
   );
 }
 
-function useHitFlash(hp: number, key: string): string {
+function useHitFlash(hp: number, key: string): { cls: string; pop: { n: number; k: number } | null } {
   const prev = useRef({ hp, key });
   const [cls, setCls] = useState('');
+  const [pop, setPop] = useState<{ n: number; k: number } | null>(null);
   useEffect(() => {
-    if (prev.current.key === key && hp < prev.current.hp) {
-      setCls('hit');
-      const t = window.setTimeout(() => setCls(''), 450);
-      prev.current = { hp, key };
-      return () => window.clearTimeout(t);
-    }
+    const was = prev.current;
     prev.current = { hp, key };
-    return undefined;
+    if (was.key !== key || was.hp === hp) return undefined;
+    setPop({ n: hp - was.hp, k: Date.now() });
+    if (hp < was.hp) setCls('hit');
+    const t = window.setTimeout(() => { setCls(''); setPop(null); }, 950);
+    return () => window.clearTimeout(t);
   }, [hp, key]);
-  return cls;
+  return { cls, pop };
 }
 
-function UnitCard({ u, enemy, id }: { u: BattleUnit; enemy?: boolean; id: string }) {
+function UnitCard({ u, enemy, id, fire }: { u: BattleUnit; enemy?: boolean; id: string; fire: number }) {
   const { config } = useGame();
   const c = config.tanks.find((t) => t.id === u.tankId);
-  const flash = useHitFlash(u.hp, id);
+  const { cls: flash, pop } = useHitFlash(u.hp, id);
   return (
     <div className={`unit ${enemy ? 'enemy' : 'ally'} ${flash} ${u.hp <= 0 ? 'dead' : ''}`}>
       <div className="unit-head"><b>{u.name}</b><ClassBadge cls={u.cls} />{u.shield && <span className="chip chip-olive"><Icon name="shield" size={12} />Оборона</span>}{u.aim > 0 && <span className="chip chip-amber">Прицел</span>}</div>
-      <TankArt cls={u.cls} shape={c?.shape ?? 0} size={170} enemy={enemy} dead={u.hp <= 0} />
+      <div className="unit-art">
+        <TankArt cls={u.cls} shape={c?.shape ?? 0} size={170} enemy={enemy} dead={u.hp <= 0} hpRatio={u.hp / u.maxHp} fire={fire} />
+        {pop && <span key={pop.k} className={`dmgnum ${pop.n < 0 ? 'neg' : 'pos'}`}>{pop.n > 0 ? '+' : ''}{pop.n}</span>}
+      </div>
       <Bar value={u.hp} max={u.maxHp} tone={enemy ? 'red' : 'olive'} label={`Прочность ${u.name}`} />
       <div className="unit-stats"><span>{u.hp}/{u.maxHp} HP</span><span>Броня {u.armor}</span><span>Огонь {u.attack}</span></div>
       {!enemy && <div className="pips" aria-label={`Энергия ${u.energy}`}>{[0, 1, 2].map((i) => <i key={i} className={i < u.energy ? 'on' : ''} />)}</div>}
@@ -159,6 +162,18 @@ function BattleArena() {
   const logRef = useRef<HTMLUListElement>(null);
   useEffect(() => { logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight }); }, [b.log.length]);
   const me = b.squad[b.active]; const foe = b.enemies[b.foe];
+  // Вспышки выстрелов: определяем по изменению прочности и записям журнала после хода.
+  const prevHp = useRef({ turn: b.turn, me: me.hp, foe: foe.hp, a: b.active, f: b.foe });
+  const [fire, setFire] = useState({ ally: 0, enemy: 0 });
+  useEffect(() => {
+    const was = prevHp.current;
+    prevHp.current = { turn: b.turn, me: me.hp, foe: foe.hp, a: b.active, f: b.foe };
+    if (b.turn === was.turn) return;
+    const tail = b.log.slice(-4).join(' ');
+    const allyShot = (b.foe === was.f && foe.hp < was.foe) || b.foe !== was.f || /мимо|Прямое попадание|ЗАЛП/.test(tail);
+    const enemyShot = (b.active === was.a && me.hp < was.me) || b.active !== was.a || /уклоняется от атаки|атакует|залп|манёвр/.test(tail);
+    setFire((f) => ({ ally: f.ally + (allyShot ? 1 : 0), enemy: f.enemy + (enemyShot ? 1 : 0) }));
+  }, [b.turn, b.log.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const done = b.status !== 'active';
   const can = (id: string): string | null => {
     if (id === 'attack' && me.energy < 1) return 'Нужна 1 энергия';
@@ -174,9 +189,9 @@ function BattleArena() {
       <Panel title={mission?.name ?? 'Бой'} icon="battle" className="arena-head"
         right={<span className="chip">Ход {b.turn}{b.turnLimit ? `/${b.turnLimit}` : ''} · {config.weather[b.weather].name}</span>}>
         <div className="arena">
-          <UnitCard u={me} id={`a${b.active}`} />
+          <UnitCard u={me} id={`a${b.active}`} fire={fire.ally} />
           <div className="vs"><span>VS</span><small>Врагов: {alive}</small></div>
-          <UnitCard u={foe} enemy id={`e${b.foe}`} />
+          <UnitCard u={foe} enemy id={`e${b.foe}`} fire={fire.enemy} />
         </div>
         <div className="strip">
           {b.squad.map((u, i) => <span key={i} className={`mini ${i === b.active ? 'cur' : ''} ${u.hp <= 0 ? 'down' : ''}`}>{u.name}<Bar value={u.hp} max={u.maxHp} /></span>)}

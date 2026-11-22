@@ -98,6 +98,11 @@ export const TANKS = [
   T('abrams', 'Abrams M1A2', 'США', 'heavy', 'Легендарная', 5, 205, 43, 44, 30, 1450, 'arm3', 13, 'Сильная защита и стабильный урон.', 'Основной боевой танк армии США.'),
   T('challenger', 'Challenger 2', 'Великобритания', 'heavy', 'Легендарная', 5, 215, 46, 42, 22, 1420, 'arm3', 14, 'Максимальная стойкость в затяжном бою.', 'Британский основной боевой танк.'),
   T('merkava', 'Merkava Mk.4', 'Израиль', 'heavy', 'Легендарная', 5, 210, 44, 43, 25, 1480, 'arm3', 15, 'Выносливый танк для осторожной тактики.', 'Современный израильский основной боевой танк.'),
+  T('su152', 'ИСУ-152', 'СССР', 'td', 'Эпическая', 4, 150, 30, 56, 18, 760, 'wpn2', 27, 'Зверобой: тяжёлый снаряд пробивает почти любую броню.', 'Советская тяжёлая САУ с гаубицей-пушкой 152 мм.'),
+  T('sprut', 'Спрут-СДМ1', 'Россия', 'light', 'Легендарная', 5, 140, 22, 40, 55, 1300, 'eng3', 28, 'Лёгкая плавающая машина с орудием среднего танка.', 'Российский лёгкий танк на базе БМД-4.'),
+  T('t14', 'Т-14 Армата', 'Россия', 'medium', 'Легендарная', 5, 200, 42, 48, 31, 1650, 'arm4', 29, 'Необитаемая башня и мощная защита нового поколения.', 'Российский основной танк на платформе «Армата».'),
+  T('k2', 'K2 Black Panther', 'Корея', 'medium', 'Легендарная', 5, 188, 39, 47, 37, 1600, 'eng3', 30, 'Быстрый и точный танк с автоматом заряжания.', 'Южнокорейский основной боевой танк.'),
+  T('pzh', 'PzH 2000', 'Германия', 'arty', 'Легендарная', 5, 120, 18, 78, 24, 1700, 'wpn4', 31, 'Самая мощная артиллерия: бьёт по всем целям.', 'Немецкая самоходная гаубица калибра 155 мм.'),
 ];
 export const TANK_BY_ID = Object.fromEntries(TANKS.map((t) => [t.id, t]));
 export const STARTER_TANK = 't34';
@@ -185,6 +190,12 @@ export const MISSIONS = [
   M('b1', 'boss', 'Стальной монстр', 'Усиленный КВ-2 перекрыл дорогу.', { arena: 'desert', weather: 'clear', diff: 1.1, fuel: 18, reqLevel: 8, reqRadar: 2, enemies: [E('kv2', 6, 'boss')], reward: { credits: 700, scrap: 110, steel: 200, xp: 240, science: 60 }, bonus: { turns: 12 } }),
   M('b2', 'boss', 'Командный бункер', 'Современный танк-командир противника.', { arena: 'hills', weather: 'rain', diff: 1.3, fuel: 22, reqLevel: 13, reqRadar: 4, enemies: [E('abrams', 9, 'boss')], reward: { credits: 1500, scrap: 220, steel: 420, xp: 480, science: 140 }, bonus: { turns: 14 } }),
   M('b3', 'boss', 'Железный кулак', 'Бронегруппа противника во главе с Challenger 2.', { arena: 'factory', weather: 'fog', diff: 1.4, fuel: 26, reqLevel: 18, reqRadar: 6, enemies: [E('challenger', 10, 'boss'), E('merkava', 9, 'guardian')], reward: { credits: 2600, scrap: 380, steel: 720, xp: 800, science: 240 }, bonus: { turns: 18 } }),
+  M('r4', 'recon', 'Рейд в тыл', 'Глубокий рейд за линию фронта.', { arena: 'coast', weather: 'fog', diff: 1.2, fuel: 11, reqLevel: 12, reqRadar: 4, enemies: [E('cv90', 8, 'skirmisher'), E('t80', 7, 'assault')], reward: { credits: 520, scrap: 76, steel: 150, xp: 190, science: 34 }, bonus: { turns: 8 } }),
+  M('d4', 'defense', 'Битва за мост', 'Три волны современной техники.', { arena: 'hills', weather: 'rain', diff: 1.25, fuel: 16, reqLevel: 14, reqRadar: 4, armorBonus: 0.12, enemies: [E('t80', 8, 'assault'), E('jagd', 8, 'skirmisher'), E('abrams', 8, 'guardian')], reward: { credits: 980, scrap: 140, steel: 280, xp: 320, science: 55 }, bonus: { noLoss: true } }),
+  M('t4', 'trial', 'Испытание тяжёлых', 'Только тяжёлые танки, отряд до двух машин.', { arena: 'factory', weather: 'clear', diff: 1.15, fuel: 12, reqLevel: 14, reqRadar: 3, reqTraining: 5, rules: { classes: ['heavy'], maxSquad: 2 }, enemies: [E('tiger', 8, 'guardian'), E('pershing', 8, 'assault')], reward: { credits: 560, scrap: 90, steel: 160, xp: 260, science: 180 }, bonus: { noLoss: true } }),
+  M('c4', 'capture', 'Прорыв линии', 'Три рубежа обороны за 22 хода.', { arena: 'desert', weather: 'sand', diff: 1.2, fuel: 18, reqLevel: 16, reqRadar: 5, turnLimit: 22, enemies: [E('t90', 8, 'assault'), E('su100', 9, 'skirmisher'), E('leo', 8, 'guardian')], reward: { credits: 1250, scrap: 180, steel: 360, xp: 400, science: 70 }, bonus: { turns: 17 } }),
+  M('b4', 'boss', 'Командир фронта', 'Т-14 «Армата» с усиленной бронёй.', { arena: 'factory', weather: 'clear', diff: 1.35, fuel: 28, reqLevel: 22, reqRadar: 7, enemies: [E('t14', 12, 'boss')], reward: { credits: 3400, scrap: 480, steel: 900, xp: 1000, science: 300 }, bonus: { turns: 16 } }),
+  M('b5', 'boss', 'Последний бой', 'Штаб противника: командир и его гвардия.', { arena: 'hills', weather: 'fog', diff: 1.4, fuel: 34, reqLevel: 28, reqRadar: 9, enemies: [E('t14', 14, 'boss'), E('challenger', 12, 'guardian'), E('pzh', 12, 'skirmisher')], reward: { credits: 6000, scrap: 800, steel: 1500, xp: 1800, science: 500 }, bonus: { turns: 22 } }),
 ];
 export const MISSION_BY_ID = Object.fromEntries(MISSIONS.map((m) => [m.id, m]));
 export const ROLES = {
@@ -235,3 +246,28 @@ export const DAILY_BONUS = [
   { credits: 100, fuel: 5 }, { credits: 150, steel: 60 }, { credits: 200, scrap: 40, fuel: 5 }, { credits: 250, steel: 120 },
   { credits: 300, science: 40, fuel: 8 }, { credits: 400, steel: 150, scrap: 60 }, { credits: 800, steel: 300, scrap: 120, science: 80, fuel: 15 },
 ];
+
+// ---------- Недельные события (ротация по номеру недели, Пн 00:00 UTC) ----------
+const WEEK = 7 * 86_400_000;
+export const WEEKLY_EVENTS = [
+  { id: 'recon-week', name: 'Неделя разведки', desc: 'Награды за разведывательные операции увеличены в 1,5 раза.', types: ['recon'], mul: 1.5 },
+  { id: 'siege-week', name: 'Осадная неделя', desc: 'Оборона и захват территории дают на 40% больше.', types: ['defense', 'capture'], mul: 1.4 },
+  { id: 'hunt-week', name: 'Охота на гигантов', desc: 'Награды за бои с сильными противниками увеличены в 1,5 раза.', types: ['boss'], mul: 1.5 },
+  { id: 'science-week', name: 'Научная неделя', desc: 'Испытания приносят на 60% больше наград.', types: ['trial'], mul: 1.6 },
+];
+export const weekIndex = (ms) => Math.floor((ms - 4 * 86_400_000) / WEEK); // неделя начинается в понедельник
+export const weekEndsAt = (ms) => (weekIndex(ms) + 1) * WEEK + 4 * 86_400_000;
+export const eventForWeek = (ms) => WEEKLY_EVENTS[((weekIndex(ms) % WEEKLY_EVENTS.length) + WEEKLY_EVENTS.length) % WEEKLY_EVENTS.length];
+export const WEEKLY_GOAL = { wins: 8, reward: { credits: 1500, steel: 400, scrap: 150, science: 100, xp: 200 } };
+
+// ---------- Рефералы ----------
+export const REFERRAL = {
+  qualifyLevel: 3, maxCounted: 100,
+  perFriend: { credits: 400, steel: 150, scrap: 50, fuel: 10 },
+  welcome: { credits: 300, steel: 100, fuel: 20 },
+  milestones: [
+    { at: 3, reward: { credits: 1000, science: 100 } },
+    { at: 10, reward: { credits: 3000, steel: 800, scrap: 300 } },
+    { at: 25, reward: { credits: 8000, steel: 2000, science: 500 } },
+  ],
+};

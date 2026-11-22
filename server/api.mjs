@@ -3,14 +3,14 @@ import * as E from './game/engine.mjs';
 import { buildConfig, buildView } from './game/view.mjs';
 import { createHash } from 'node:crypto';
 
-const AUDITED = new Set(['build/start', 'build/cancel', 'tank/produce', 'tank/produce-cancel', 'tank/upgrade', 'research/start',
+const AUDITED = new Set(['referral/claim', 'weekly/claim', 'profile/notify', 'build/start', 'build/cancel', 'tank/produce', 'tank/produce-cancel', 'tank/upgrade', 'research/start',
   'research/cancel', 'battle/start', 'battle/claim', 'quest/claim', 'achievement/claim', 'profile/nickname']);
 
 export function summarize(state) {
-  return { nickname: state.nickname, xp: state.xp, level: E.commanderLevel(state), wins: state.stats.wins };
+  return { nickname: state.nickname, xp: state.xp, level: E.commanderLevel(state), wins: state.stats.wins, nextEventAt: E.nextEventAt(state), notifyEnabled: Boolean(state.notify?.enabled) };
 }
 
-export function createGameApi({ store, authenticate, limiter, timeScale = 1, clock = Date.now, rng = Math.random, log = console }) {
+export function createGameApi({ store, authenticate, limiter, timeScale = 1, clock = Date.now, rng = Math.random, log = console, botUsername = () => null }) {
   const config = buildConfig();
   const configJson = JSON.stringify({ ok: true, config });
   const etag = `"${createHash('sha1').update(configJson).digest('hex').slice(0, 16)}"`;
@@ -36,14 +36,19 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
     if (!store) return { status: 503, body: { error: 'database_not_configured', message: 'База данных не подключена.' } };
     if (!limiter(user.id, clock())) return { status: 429, body: { error: 'rate_limited', message: 'Слишком много запросов. Подождите пару секунд.' } };
     const profile = { firstName: user.firstName, username: user.username };
+    const bot = botUsername();
+    const referralLink = bot && Number(user.id) > 0 ? `https://t.me/${bot}?start=ref_${user.id}` : null;
 
     try {
       if (route === 'state' && req.method === 'GET') {
+        const [stats, by] = await Promise.all([store.referralStats(user.id), store.referralOf(user.id)]);
         const view = await store.transact(user.id, profile, async (state) => {
           const now = clock();
           const next = structuredClone(state);
           E.settle(next, now);
-          return { state: next, result: buildView(next, now, { timeScale }) };
+          if (by) E.applyReferralWelcome(next, now);
+          E.markEventsSeen(next);
+          return { state: next, result: buildView(next, now, { timeScale, referral: stats, referralLink }) };
         });
         return { status: 200, body: { ok: true, view } };
       }
@@ -55,11 +60,12 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
         const action = route;
         if (!E.ACTION_NAMES.includes(action)) return { status: 404, body: { error: 'not_found', message: 'Неизвестный маршрут.' } };
         const body = await readBody(req);
+        const stats = await store.referralStats(user.id);
         const view = await store.transact(user.id, profile, async (state) => {
           const now = clock();
-          const next = E.perform(state, action, body, { now, rng, timeScale, requestId: body.requestId });
+          const next = E.perform(state, action, body, { now, rng, timeScale, requestId: body.requestId, referral: stats });
           const audit = AUDITED.has(action) ? [{ action, payload: auditPayload(action, body) }] : [];
-          return { state: next, audit, result: buildView(next, now, { timeScale }) };
+          return { state: next, audit, result: buildView(next, now, { timeScale, referral: stats, referralLink }) };
         });
         log.log(`[game] ${action} user=${user.id.length > 3 ? `…${user.id.slice(-3)}` : user.id}`);
         return { status: 200, body: { ok: true, view } };

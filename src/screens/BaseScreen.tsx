@@ -33,6 +33,7 @@ export function BaseScreen() {
   if (view.researchQueue.length < view.base.researchSlots && view.techs.some((t) => !t.done && !t.queued && !t.problem)) hints.push({ icon: 'research', text: 'Лаборатория простаивает — выберите исследование', to: () => go('research') });
   if (view.produceQueue.length < view.base.productionSlots && view.tanks.some((t) => !t.owned && !t.producing && !t.problem)) hints.push({ icon: 'hangar', text: 'Линия производства свободна — выпустите новую машину', to: () => go('hangar') });
   if (view.resources.fuel >= view.caps.fuel * 0.9 && !view.battle) hints.push({ icon: 'fuel', text: 'Топливо почти на максимуме — самое время для операции', to: () => go('battle') });
+  if (view.referral.link && view.referral.invited === 0 && view.stats.wins >= 1) hints.push({ icon: 'profile', text: 'Пригласите друга — получите награду за каждого', to: () => go('profile') });
   if (!hints.length) hints.push({ icon: 'info', text: 'Копите ресурсы для следующего улучшения штаба', to: () => go('build', 'hq') });
 
   const xpPct = view.commander.xpNext > view.commander.xpBase ? view.commander.xp - view.commander.xpBase : 1;
@@ -46,6 +47,7 @@ export function BaseScreen() {
             <p className="eyebrow">Военная база</p>
             <h2>База «{view.nickname}»</h2>
             <p className="muted">Уровень базы {view.base.level} · командир {view.commander.level} ур.</p>
+            <button className="event-pill" onClick={() => go('quests')}><Icon name="flag" size={13} />{view.weekly.event.name} ×{view.weekly.event.mul}</button>
           </div>
           <div className="power" title="Электроэнергия: при дефиците замедляется производство">
             <Icon name="power" size={16} />

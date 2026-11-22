@@ -248,3 +248,41 @@ p, li, b, span, small { overflow-wrap: anywhere; }
 /* Уведомления сверху, чтобы не перекрывать подсказку обучения и нижнюю навигацию */
 .toasts { bottom: auto; top: calc(var(--sat) + 100px); }
 @media (min-width: 1024px) { .toasts { top: 72px; left: auto; right: 28px; transform: none; width: 380px; } }
+
+/* ---------- Графика v2.2: техника, бой, карточки ---------- */
+.tank-art { overflow: visible; }
+.tank-idle { animation: bob 3.4s ease-in-out infinite; }
+.muzzle { animation: flash .36s ease-out forwards; }
+.dmg-smoke { opacity: 0; animation: puff 2.2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.dmg-fire { animation: flicker .5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center bottom; }
+.unit-art { position: relative; display: grid; place-items: center; width: 100%; }
+.dmgnum { position: absolute; top: 4%; left: 50%; font: 800 26px var(--font); text-shadow: 0 2px 6px #000; pointer-events: none; animation: floatup .95s ease-out forwards; }
+.dmgnum.neg { color: #ff8a7d; } .dmgnum.pos { color: #a9d36b; }
+.unit.ally.hit { box-shadow: 0 0 0 1px var(--red), 0 0 22px rgba(193,82,74,.35); } .unit.enemy.hit { box-shadow: 0 0 0 1px var(--amber), 0 0 22px rgba(227,154,45,.3); }
+.unit { transition: box-shadow .25s; }
+.panel::before { content: ''; position: absolute; left: 12px; right: 12px; top: -1px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--olive), transparent 55%); opacity: .7; pointer-events: none; }
+.showcase { box-shadow: inset 0 -36px 60px -36px var(--rc, transparent); }
+.showcase.r-legend { animation: glowpulse 3.6s ease-in-out infinite; }
+.tcard { transition: transform .15s, box-shadow .2s, border-color .2s; box-shadow: inset 0 18px 24px -22px var(--rc, transparent); } .tcard:hover { transform: translateY(-2px); }
+.tcard.r-legend { box-shadow: inset 0 18px 24px -18px var(--amber), 0 0 12px rgba(227,154,45,.12); }
+.plot:hover .b-main, .plot.sel .b-main { filter: drop-shadow(0 0 7px rgba(227,154,45,.4)); } .plot.working .b-main { filter: drop-shadow(0 0 8px rgba(227,154,45,.35)); }
+.btn-amber { box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 10px rgba(227,154,45,.22); } .btn-primary { box-shadow: inset 0 1px 0 rgba(255,255,255,.14); }
+.xp-mini { flex: 1; max-width: 110px; height: 5px; border-radius: 3px; background: #0c0f10; border: 1px solid var(--line); overflow: hidden; } .xp-mini i { display: block; height: 100%; background: linear-gradient(90deg, var(--olive-d), var(--olive)); }
+
+/* ---------- Социальное: событие недели, друзья, уведомления ---------- */
+.event-pill { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 3px 10px; border-radius: 999px; background: rgba(227,154,45,.12); border: 1px solid var(--amber-d); color: var(--amber); font-size: 12.5px; font-weight: 650; }
+.event-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; margin-bottom: 6px; border-radius: 9px; background: linear-gradient(90deg, rgba(227,154,45,.14), transparent); border: 1px solid var(--amber-d); }
+.linkbox { margin: 8px 0; padding: 9px 10px; border-radius: 8px; background: var(--bg2); border: 1px dashed var(--line2); overflow-x: auto; } .linkbox code { font: 12.5px var(--mono); color: #cdd6d9; white-space: nowrap; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; } .two .btn { padding: 0 8px; }
+.small-kv dd { font-size: 20px; } .small-kv { margin: 10px 0 0; }
+.miles { display: grid; gap: 6px; margin: 10px 0; } .miles li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 9px; background: var(--bg2); border: 1px solid var(--line); } .miles li.ready { border-color: var(--amber); } .miles li.claimed { opacity: .6; } .m-n { font-weight: 800; font-size: 18px; color: var(--amber); min-width: 26px; } .m-t { color: var(--muted); font-size: 12.5px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
+.switch { position: relative; flex: none; width: 52px; height: 30px; border-radius: 999px; background: #0c0f10; border: 1px solid var(--line2); transition: background .2s, border-color .2s; } .switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; } .switch.on { background: var(--olive-d); border-color: var(--olive); } .switch.on i { transform: translateX(22px); background: #f0f4de; } .switch:disabled { opacity: .5; }
+
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+@keyframes flash { 0% { opacity: 1; transform: scale(.4); } 40% { opacity: 1; transform: scale(1.15); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes puff { 0% { opacity: 0; transform: translateY(0) scale(.6); } 30% { opacity: .6; } 100% { opacity: 0; transform: translateY(-22px) scale(1.8); } }
+@keyframes flicker { from { transform: scaleY(.8); opacity: .75; } to { transform: scaleY(1.2); opacity: 1; } }
+@keyframes floatup { 0% { opacity: 0; transform: translate(-50%, 8px) scale(.7); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -34px) scale(1); } }
+@keyframes glowpulse { 0%, 100% { box-shadow: inset 0 -36px 60px -36px var(--amber), 0 0 0 rgba(227,154,45,0); } 50% { box-shadow: inset 0 -36px 60px -30px var(--amber), 0 0 18px rgba(227,154,45,.22); } }
+@media (prefers-reduced-motion: reduce) { .tank-idle, .dmg-smoke, .dmg-fire, .showcase.r-legend { animation: none !important; } .dmg-smoke { opacity: .4; } .muzzle { animation-duration: .001ms !important; } }

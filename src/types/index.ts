@@ -23,6 +23,7 @@ export interface GameConfig {
   arenas: Record<string, { name: string; desc: string }>; weather: Record<string, { name: string; desc: string }>;
   roles: Record<string, string>; achievements: AchievementCfg[]; resources: ResourceKey[]; levelGrowth: number;
   tutorial: TutorialStepCfg[]; dailyBonus: (Cost & { xp?: number })[];
+  referral: { qualifyLevel: number; perFriend: Cost; welcome: Cost };
 }
 export interface TutorialStepCfg { id: string; title: string; text: string; screen: Screen; reward: Cost & { xp?: number } }
 
@@ -75,8 +76,18 @@ export interface GameView {
   quests: QuestView[]; questsResetAt: number; achievements: { id: string; value: number; claimed: boolean }[];
   tutorial: { step: number; total: number; done: boolean; ready: boolean };
   bonus: { available: boolean; streak: number; nextDay: number };
+  weekly: WeeklyView; notify: boolean; referral: ReferralView;
   stats: { battles: number; wins: number; losses: number; built: number; researched: number; upgrades: number; produced: number; bossWins: number };
   events: GameEvent[]; legacy: { importedAt: number } | null;
 }
 export interface LeaderRow { nickname: string; level: number; xp: number; wins: number }
 export type Screen = 'base' | 'hangar' | 'build' | 'research' | 'battle' | 'quests' | 'profile';
+
+export interface WeeklyView {
+  event: { id: string; name: string; desc: string; types: MissionType[]; mul: number };
+  endsAt: number; progress: number; goal: number; claimed: boolean; reward: Cost & { xp?: number };
+}
+export interface ReferralView {
+  invited: number; qualified: number; claimed: number; claimable: number; link: string | null; welcomed: boolean;
+  milestones: { at: number; reward: Cost; reached: boolean; claimed: boolean }[];
+}
