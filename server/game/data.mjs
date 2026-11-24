@@ -271,3 +271,91 @@ export const REFERRAL = {
     { at: 25, reward: { credits: 8000, steel: 2000, science: 500 } },
   ],
 };
+
+// ---------- Звания командира ----------
+export const RANKS = [
+  [1, 'Рядовой'], [2, 'Ефрейтор'], [4, 'Младший сержант'], [6, 'Сержант'], [8, 'Старший сержант'], [10, 'Старшина'], [12, 'Прапорщик'],
+  [15, 'Младший лейтенант'], [18, 'Лейтенант'], [21, 'Старший лейтенант'], [24, 'Капитан'], [28, 'Майор'], [32, 'Подполковник'],
+  [36, 'Полковник'], [40, 'Генерал-майор'], [44, 'Генерал-лейтенант'], [47, 'Генерал-полковник'], [50, 'Генерал армии'],
+];
+export const rankFor = (level) => { let r = RANKS[0][1]; for (const [at, name] of RANKS) if (level >= at) r = name; return r; };
+
+// ---------- Экипаж и навыки ----------
+export const CREW = { xpPerPoint: 100, maxPoints: 15, respecPerPoint: 150, xpWin: 40, xpLoss: 15 };
+export const SKILLS = [
+  { id: 'gunnery', name: 'Меткий наводчик', desc: '+3% к огневой мощи за ранг', max: 5, effect: { attackPct: 3 } },
+  { id: 'plates', name: 'Бронепластины', desc: '+3% к броне за ранг', max: 5, effect: { armorPct: 3 } },
+  { id: 'vitality', name: 'Живучесть', desc: '+4% к прочности за ранг', max: 5, effect: { hpPct: 4 } },
+  { id: 'driver', name: 'Механик-водитель', desc: '+2 к мобильности за ранг', max: 5, effect: { mobilityFlat: 2 } },
+  { id: 'medic', name: 'Ремонтник', desc: '+12% к силе ремонта за ранг', max: 3, effect: { repairPct: 12 } },
+];
+/** Особый навык класса (шестой в дереве). */
+export const CLASS_SKILLS = {
+  light: { id: 'evasion', name: 'Манёвр', desc: '+2% к уклонению за ранг', max: 5, effect: { evadeBonus: 0.02 } },
+  medium: { id: 'allround', name: 'Универсал', desc: '+2% к огню и броне за ранг', max: 5, effect: { attackPct: 2, armorPct: 2 } },
+  heavy: { id: 'bracing', name: 'Усиленная стойка', desc: 'Оборона гасит на 4% больше за ранг', max: 5, effect: { guardBonus: 0.04 } },
+  td: { id: 'ambush', name: 'Засада', desc: 'Первый выстрел на 6% сильнее за ранг', max: 5, effect: { ambushBonus: 0.06 } },
+  arty: { id: 'splash', name: 'Осколочный залп', desc: '+8% урона по остальным целям залпа за ранг', max: 5, effect: { splashBonus: 0.08 } },
+};
+export const skillsFor = (cls) => [...SKILLS, CLASS_SKILLS[cls]];
+
+// ---------- PvP и сезоны ----------
+export const PVP = { startRating: 1000, dailyTickets: 6, window: 250, maxWindow: 400, kPlayer: 28, kBot: 14, turnLimit: 24, minLevel: 2,
+  win: { credits: 220, steel: 60, scrap: 20, xp: 40 }, loss: { credits: 50, xp: 10 }, botMul: 0.6 };
+export const PVP_TIERS = [
+  { id: 'bronze', name: 'Бронза', min: 0, reward: { credits: 500, steel: 100 } },
+  { id: 'silver', name: 'Серебро', min: 1100, reward: { credits: 1200, steel: 300, scrap: 100 } },
+  { id: 'gold', name: 'Золото', min: 1300, reward: { credits: 2500, steel: 600, scrap: 200 } },
+  { id: 'platinum', name: 'Платина', min: 1500, reward: { credits: 4500, steel: 1000, science: 200 } },
+  { id: 'diamond', name: 'Алмаз', min: 1800, reward: { credits: 8000, steel: 2000, science: 500 } },
+];
+export const tierFor = (rating) => { let t = PVP_TIERS[0]; for (const x of PVP_TIERS) if (rating >= x.min) t = x; return t; };
+export const seasonKey = (ms) => new Date(ms).toISOString().slice(0, 7);
+export const seasonEndsAt = (ms) => { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1); };
+export const SEASON_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+export const seasonTitle = (key) => `${SEASON_NAMES[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+
+// ---------- Бесплатный сезонный пропуск ----------
+export const PASS = { levels: 30, xpPerLevel: 100, xp: { win: 10, loss: 5, pvp: 15, quest: 20, weekly: 100, tutorial: 0 } };
+const passReward = (l) => {
+  const r = { credits: 150 + 30 * l };
+  if (l % 2 === 0) r.steel = 60 + 12 * l;
+  if (l % 3 === 0) r.scrap = 20 + 5 * l;
+  if (l % 5 === 0) r.science = 20 + 4 * l;
+  if (l % 4 === 0) r.fuel = 10;
+  return r;
+};
+export const PASS_REWARDS = Array.from({ length: PASS.levels }, (_, i) => {
+  const level = i + 1; const reward = passReward(level);
+  const extra = { 10: { cosmetic: 'camo:night' }, 20: { cosmetic: 'emblem:dragon' }, 30: { cosmetic: 'camo:gold', title: true } }[level];
+  return { level, reward, ...(extra || {}) };
+});
+
+// ---------- Косметика (не влияет на силу) ----------
+export const CAMOS = [
+  { id: 'default', name: 'Заводской', req: null, text: 'Доступен сразу' },
+  { id: 'desert', name: 'Пустыня', req: { metric: 'commander', goal: 5 }, text: 'Командир 5 уровня' },
+  { id: 'forest', name: 'Лесной', req: { metric: 'commander', goal: 10 }, text: 'Командир 10 уровня' },
+  { id: 'arctic', name: 'Арктика', req: { metric: 'wins', goal: 25 }, text: '25 побед в операциях' },
+  { id: 'night', name: 'Ночной', req: { metric: 'passLevel', goal: 10 }, text: 'Пропуск: 10 уровень' },
+  { id: 'gold', name: 'Золотой', req: { metric: 'passLevel', goal: 30 }, text: 'Пропуск: 30 уровень' },
+];
+export const EMBLEMS = [
+  { id: 'none', name: 'Без эмблемы', req: null, text: 'Доступно сразу' },
+  { id: 'star', name: 'Звезда', req: { metric: 'wins', goal: 1 }, text: 'Первая победа' },
+  { id: 'skull', name: 'Череп', req: { metric: 'bossWins', goal: 1 }, text: 'Победа над сильным противником' },
+  { id: 'wolf', name: 'Волк', req: { metric: 'commander', goal: 15 }, text: 'Командир 15 уровня' },
+  { id: 'eagle', name: 'Орёл', req: { metric: 'pvpBest', goal: 1100 }, text: 'Рейтинг дуэлей 1100' },
+  { id: 'crown', name: 'Корона', req: { metric: 'wins', goal: 100 }, text: '100 побед в операциях' },
+  { id: 'dragon', name: 'Дракон', req: { metric: 'passLevel', goal: 20 }, text: 'Пропуск: 20 уровень' },
+];
+
+// ---------- Кланы ----------
+export const CLAN = { minLevel: 5, maxMembers: 30, goalPerMember: 300, minName: 3, maxName: 20,
+  points: { recon: 5, defense: 8, capture: 8, trial: 6, boss: 15, pvp: 10 },
+  reward: { credits: 1000, steel: 300, scrap: 100, science: 80 } };
+export const clanGoal = (members) => CLAN.goalPerMember * Math.max(1, Math.min(members, CLAN.maxMembers));
+
+// ---------- Напоминания бота ----------
+export const NOTIFY_TYPES = ['builds', 'fuel', 'bonus', 'event'];
+export const REMIND = { bonusHourUtc: 16, eventHourUtc: 8, activeDays: 3, eventActiveDays: 7 };

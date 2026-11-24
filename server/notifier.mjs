@@ -16,7 +16,7 @@ export function createNotifier({ store, send, clock = Date.now, log = console })
           lines = await store.transact(id, {}, async (state) => {
             const next = structuredClone(state);
             E.settle(next, clock());
-            return { state: next, result: E.takeNotifications(next) };
+            return { state: next, result: E.takeNotifications(next, clock()) };
           });
         } catch (error) {
           log.error(`[notify] не удалось обработать игрока: ${String(error.message).slice(0, 120)}`);

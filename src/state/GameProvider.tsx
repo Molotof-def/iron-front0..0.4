@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
 import { haptic } from '../lib/telegram';
+import { sfx } from '../lib/settings';
 import type { GameConfig, GameEvent, GameView } from '../types';
 
 export interface Toast { id: number; kind: 'ok' | 'err' | 'info'; text: string }
@@ -74,11 +75,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const view = await api.act(action, payload);
       applyView(view);
       haptic('success');
-      if (okText) notify('ok', okText);
+      if (okText) { notify('ok', okText); sfx('claim'); }
       return view;
     } catch (e) {
       const err = e as ApiError;
-      haptic('error');
+      haptic('error'); sfx('error');
       if (err.code === 'duplicate_request') void refresh();
       else notify('err', err.message || 'Ошибка запроса.');
       return null;

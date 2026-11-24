@@ -28,6 +28,14 @@ export function buildConfig() {
     levelGrowth: D.LEVEL_GROWTH,
     tutorial: D.TUTORIAL.map((t) => ({ id: t.id, title: t.title, text: t.text, screen: t.screen, reward: t.reward })),
     dailyBonus: D.DAILY_BONUS,
+    ranks: D.RANKS,
+    crew: D.CREW,
+    skills: Object.fromEntries(Object.keys(D.CLASSES).map((c) => [c, D.skillsFor(c).map((k) => ({ id: k.id, name: k.name, desc: k.desc, max: k.max }))])),
+    camos: D.CAMOS.map((c) => ({ id: c.id, name: c.name, text: c.text })),
+    emblems: D.EMBLEMS.map((c) => ({ id: c.id, name: c.name, text: c.text })),
+    pass: { levels: D.PASS.levels, xpPerLevel: D.PASS.xpPerLevel, rewards: D.PASS_REWARDS },
+    pvpTiers: D.PVP_TIERS, pvp: { dailyTickets: D.PVP.dailyTickets, minLevel: D.PVP.minLevel, win: D.PVP.win, loss: D.PVP.loss },
+    clan: { minLevel: D.CLAN.minLevel, maxMembers: D.CLAN.maxMembers, goalPerMember: D.CLAN.goalPerMember, reward: D.CLAN.reward, minName: D.CLAN.minName, maxName: D.CLAN.maxName },
     referral: { qualifyLevel: D.REFERRAL.qualifyLevel, perFriend: D.REFERRAL.perFriend, welcome: D.REFERRAL.welcome },
   };
 }
@@ -67,10 +75,29 @@ function battleView(b) {
   if (!b) return null;
   const unit = (u) => ({ tankId: u.tankId, name: u.name, cls: u.cls, role: u.role, hp: u.hp, maxHp: u.maxHp, attack: u.attack, armor: u.armor, mobility: u.mobility, energy: u.energy, shield: u.shield > 0, aim: u.aim });
   return {
-    id: b.id, missionId: b.missionId, status: b.status, turn: b.turn, turnLimit: b.turnLimit, arena: b.arena, weather: b.weather,
+    id: b.id, missionId: b.missionId, title: b.title, pvp: b.pvp, status: b.status, turn: b.turn, turnLimit: b.turnLimit, arena: b.arena, weather: b.weather,
     squad: b.squad.map(unit), active: b.active, enemies: b.enemies.map(unit), foe: b.foe, freeRepairs: b.freeRepairs,
     log: b.log.slice(-14), reward: b.reward, claimed: b.claimed,
   };
+}
+
+function pvpView(state, now) {
+  const p = state.pvp; const tier = D.tierFor(p.rating);
+  const prev = p.prev && { season: p.prev.season, title: D.seasonTitle(p.prev.season), rating: p.prev.rating, tier: D.PVP_TIERS.find((t) => t.id === p.prev.tier), claimed: p.prev.claimed };
+  const next = D.PVP_TIERS.find((t) => t.min > p.rating) || null;
+  return {
+    rating: p.rating, tier: { id: tier.id, name: tier.name }, nextTier: next && { name: next.name, at: next.min }, bestEver: p.bestEver,
+    played: p.played, wins: p.wins, losses: p.losses, ticketsLeft: Math.max(0, D.PVP.dailyTickets - p.used), ticketsMax: D.PVP.dailyTickets,
+    season: p.season, seasonTitle: D.seasonTitle(p.season), seasonEndsAt: D.seasonEndsAt(now), minLevel: D.PVP.minLevel,
+    defenseIds: p.defenseIds.length ? p.defenseIds : state.squad, defense: p.defense, power: E.defensePower(p.defense), prev,
+  };
+}
+function passView(state, now) {
+  return { season: state.pass.season, seasonTitle: D.seasonTitle(state.pass.season), endsAt: D.seasonEndsAt(now), xp: state.pass.xp, level: E.passLevel(state), claimed: state.pass.claimed };
+}
+function cosmeticsView(state) {
+  const mark = (list) => list.map((c) => ({ id: c.id, unlocked: E.cosmeticUnlocked(state, c), progress: c.req ? Math.min(c.req.goal, E.cosmeticMetric(state, c.req.metric)) : 0, goal: c.req ? c.req.goal : 0 }));
+  return { camos: mark(D.CAMOS), emblems: mark(D.EMBLEMS) };
 }
 
 export function buildView(state, now, opts = {}) {
@@ -98,13 +125,16 @@ export function buildView(state, now, opts = {}) {
   const tanks = D.TANKS.map((def) => {
     const owned = state.tanks[def.id];
     const lvl = owned ? owned.level : 1;
+    const tb = owned ? E.combinedBonuses(state, def.id, bonuses) : bonuses;
     const maxLvl = D.maxTankLevel(state.buildings.training);
     const produce = owned ? null : state.produceQueue.find((q) => q.tankId === def.id) || null;
     const upCost = owned && owned.level < maxLvl ? D.upgradeCost(def, owned.level) : null;
     return {
       id: def.id, owned: Boolean(owned), level: owned ? owned.level : 0,
-      stats: tankStats(def, lvl, bonuses),
-      nextStats: owned && owned.level < maxLvl ? tankStats(def, lvl + 1, bonuses) : null,
+      stats: tankStats(def, lvl, tb),
+      nextStats: owned && owned.level < maxLvl ? tankStats(def, lvl + 1, tb) : null,
+      crew: owned ? E.crewInfo(owned, def.class) : null,
+      cosmetic: owned ? (state.cosmetics[def.id] || { camo: 'default', emblem: 'none' }) : null,
       upgradeCost: upCost, upgradeProblem: owned ? problemOf(E.checkUpgradeTank(state, def.id)) : null,
       produceSeconds: owned ? 0 : sec(E.produceDurationMs(state, def, ts, bonuses)),
       producing: produce, problem: owned ? null : problemOf(E.checkProduce(state, def.id)),
@@ -131,7 +161,7 @@ export function buildView(state, now, opts = {}) {
 
   return {
     serverTime: now, timeScale: ts, nickname: state.nickname,
-    commander: { level, xp: state.xp, xpBase, xpNext: level >= D.MAX_COMMANDER_LEVEL ? xpBase : xpNext },
+    commander: { level, rank: D.rankFor(level), xp: state.xp, xpBase, xpNext: level >= D.MAX_COMMANDER_LEVEL ? xpBase : xpNext },
     resources, caps, rates: Object.fromEntries(Object.entries(rates).map(([k, v]) => [k, Math.round(v * 10) / 10])),
     power, bonuses,
     base: {
@@ -146,7 +176,9 @@ export function buildView(state, now, opts = {}) {
     tutorial: { step: state.tutorial.step, total: D.TUTORIAL.length, done: state.tutorial.done, ready: E.tutorialReady(state) },
     bonus: E.bonusStatus(state, now),
     weekly: E.weeklyStatus(state, now),
-    notify: state.notify.enabled,
+    notify: state.notify.enabled, notifyTypes: state.notify.types,
+    pvp: pvpView(state, now), pass: passView(state, now), cosmetics: cosmeticsView(state),
+    clan: { points: state.clan.points, claimed: state.clan.claimedWeek === state.clan.week, week: state.clan.week, goalPerMember: D.CLAN.goalPerMember },
     referral: { ...E.referralStatus(state, opts.referral), link: opts.referralLink || null, welcomed: state.referral.welcomed },
     stats: state.stats, events: state.events, legacy: state.legacy ? { importedAt: state.legacy.importedAt } : null,
   };

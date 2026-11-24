@@ -24,6 +24,13 @@ export interface GameConfig {
   roles: Record<string, string>; achievements: AchievementCfg[]; resources: ResourceKey[]; levelGrowth: number;
   tutorial: TutorialStepCfg[]; dailyBonus: (Cost & { xp?: number })[];
   referral: { qualifyLevel: number; perFriend: Cost; welcome: Cost };
+  ranks: [number, string][]; crew: { xpPerPoint: number; maxPoints: number; respecPerPoint: number };
+  skills: Record<TankClass, { id: string; name: string; desc: string; max: number }[]>;
+  camos: { id: string; name: string; text: string }[]; emblems: { id: string; name: string; text: string }[];
+  pass: { levels: number; xpPerLevel: number; rewards: { level: number; reward: Cost & { xp?: number }; cosmetic?: string; title?: boolean }[] };
+  pvpTiers: { id: string; name: string; min: number; reward: Cost }[];
+  pvp: { dailyTickets: number; minLevel: number; win: Cost & { xp?: number }; loss: Cost & { xp?: number } };
+  clan: { minLevel: number; maxMembers: number; goalPerMember: number; reward: Cost; minName: number; maxName: number };
 }
 export interface TutorialStepCfg { id: string; title: string; text: string; screen: Screen; reward: Cost & { xp?: number } }
 
@@ -36,7 +43,9 @@ export interface BuildingView {
   id: BuildingId; level: number; queued: BuildQueueItem | null; problem: Problem;
   next: { level: number; cost: Cost; seconds: number; reqHq: number; reqCommander: number } | null;
 }
+export interface CrewInfo { xp: number; points: number; spent: number; free: number; skills: Record<string, number>; nextAt: number | null }
 export interface TankView {
+  crew: CrewInfo | null; cosmetic: { camo: string; emblem: string } | null;
   id: string; owned: boolean; level: number; stats: Stats4; nextStats: Stats4 | null; upgradeCost: Cost | null;
   upgradeProblem: Problem; produceSeconds: number; producing: ProduceQueueItem | null; problem: Problem;
 }
@@ -53,8 +62,9 @@ export interface BattleUnit {
   tankId: string; name: string; cls: TankClass; role: string | null; hp: number; maxHp: number; attack: number;
   armor: number; mobility: number; energy: number; shield: boolean; aim: number;
 }
-export interface RewardView extends Cost { xp: number; bonus: boolean; firstClear: boolean }
+export interface RewardView extends Cost { xp: number; bonus: boolean; firstClear: boolean; rating?: number; event?: boolean }
 export interface BattleView {
+  title: string; pvp: { opponent: { id: string; nickname: string; level: number; rating: number; bot: boolean } } | null;
   id: string; missionId: string; status: 'active' | 'won' | 'lost' | 'retreated'; turn: number; turnLimit: number;
   arena: string; weather: string; squad: BattleUnit[]; active: number; enemies: BattleUnit[]; foe: number;
   freeRepairs: number; log: string[]; reward: RewardView | null; claimed: boolean;
@@ -64,7 +74,7 @@ export interface GameEvent { id: number; t: number; kind: string; text: string }
 
 export interface GameView {
   serverTime: number; timeScale: number; nickname: string;
-  commander: { level: number; xp: number; xpBase: number; xpNext: number };
+  commander: { level: number; rank: string; xp: number; xpBase: number; xpNext: number };
   resources: Resources; caps: { steel: number; scrap: number; fuel: number }; rates: Resources;
   power: { produced: number; used: number; efficiency: number }; bonuses: Record<string, number>;
   base: {
@@ -76,7 +86,8 @@ export interface GameView {
   quests: QuestView[]; questsResetAt: number; achievements: { id: string; value: number; claimed: boolean }[];
   tutorial: { step: number; total: number; done: boolean; ready: boolean };
   bonus: { available: boolean; streak: number; nextDay: number };
-  weekly: WeeklyView; notify: boolean; referral: ReferralView;
+  weekly: WeeklyView; notify: boolean; notifyTypes: NotifyTypes; referral: ReferralView;
+  pvp: PvpView; pass: PassView; cosmetics: { camos: CosmeticState[]; emblems: CosmeticState[] }; clan: { points: number; claimed: boolean; week: number; goalPerMember: number };
   stats: { battles: number; wins: number; losses: number; built: number; researched: number; upgrades: number; produced: number; bossWins: number };
   events: GameEvent[]; legacy: { importedAt: number } | null;
 }
@@ -91,3 +102,22 @@ export interface ReferralView {
   invited: number; qualified: number; claimed: number; claimable: number; link: string | null; welcomed: boolean;
   milestones: { at: number; reward: Cost; reached: boolean; claimed: boolean }[];
 }
+
+export interface NotifyTypes { builds: boolean; fuel: boolean; bonus: boolean; event: boolean }
+export interface CosmeticState { id: string; unlocked: boolean; progress: number; goal: number }
+export interface DefenseUnit { tankId: string; level: number; hp: number; attack: number; armor: number; mobility: number; camo: string; emblem: string }
+export interface PvpView {
+  rating: number; tier: { id: string; name: string }; nextTier: { name: string; at: number } | null; bestEver: number;
+  played: number; wins: number; losses: number; ticketsLeft: number; ticketsMax: number; season: string; seasonTitle: string; seasonEndsAt: number;
+  minLevel: number; defenseIds: string[]; defense: DefenseUnit[]; power: number;
+  prev: { season: string; title: string; rating: number; tier: { id: string; name: string; reward: Cost }; claimed: boolean } | null;
+}
+export interface PassView { season: string; seasonTitle: string; endsAt: number; xp: number; level: number; claimed: number[] }
+export interface Opponent {
+  id: string; nickname: string; level: number; rating: number; bot: boolean; power: number;
+  units: { tankId: string; name: string; cls: TankClass; shape: number; level: number; hp: number; attack: number; armor: number; camo: string; emblem: string }[];
+}
+export interface ClanMember { nickname: string; level: number; points: number; leader: boolean; me: boolean }
+export interface ClanInfo { id: string; name: string; tag: string; total: number; goal: number; maxMembers: number; members: ClanMember[]; weekEndsAt: number }
+export interface ClanListRow { id: string; name: string; tag: string; members: number; points: number }
+export interface ClanData { clan: ClanInfo | null; list: ClanListRow[]; minLevel: number; unavailable?: boolean }

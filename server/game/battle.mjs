@@ -26,11 +26,20 @@ const unitFrom = (def, stats, role) => ({
   energy: MAX_ENERGY, shield: 0, aim: 0, ambush: def.class === 'td', acted: 0,
 });
 
-export function makePlayerUnit(def, level, bonuses, mission) {
+/** special — личные эффекты экипажа: evadeBonus, guardBonus, ambushBonus, splashBonus, repairPct. */
+export function makePlayerUnit(def, level, bonuses, mission, special = {}) {
   const s = tankStats(def, level, bonuses);
   const arena = ARENAS[mission.arena];
   s.armor = Math.round((s.armor + arena.playerArmor) * (1 + (mission.armorBonus || 0)));
-  return unitFrom(def, s);
+  return Object.assign(unitFrom(def, s), {
+    evadeBonus: special.evadeBonus || 0, guardBonus: special.guardBonus || 0, ambushBonus: special.ambushBonus || 0,
+    splashBonus: special.splashBonus || 0, repairPct: special.repairPct || 0,
+  });
+}
+
+/** Защитник из снимка отряда другого игрока (PvP): параметры уже посчитаны с бонусами владельца. */
+export function makeSnapshotUnit(def, snap, role) {
+  return unitFrom(def, { hp: snap.hp, attack: snap.attack, armor: snap.armor, mobility: snap.mobility }, role);
 }
 
 export function makeEnemyUnit(def, level, role, mission) {
@@ -44,9 +53,9 @@ export function makeEnemyUnit(def, level, role, mission) {
   return unitFrom(def, s, role);
 }
 
-export function createBattle({ id, mission, squad, enemies, now, freeRepairs, repairPct }) {
+export function createBattle({ id, mission, squad, enemies, now, freeRepairs, repairPct, title, pvp }) {
   return {
-    id, missionId: mission.id, startedAt: now, turn: 0, status: 'active',
+    id, missionId: mission.id, title: title || mission.name, pvp: pvp || null, startedAt: now, turn: 0, status: 'active',
     squad, active: 0, enemies, foe: 0,
     turnLimit: mission.turnLimit || 0, arena: mission.arena, weather: mission.weather,
     freeRepairs, repairPct, lost: 0, log: [`Операция «${mission.name}» началась. ${ARENAS[mission.arena].name}, ${WEATHER[mission.weather].name.toLowerCase()}.`],
@@ -55,7 +64,7 @@ export function createBattle({ id, mission, squad, enemies, now, freeRepairs, re
 }
 
 const say = (b, msg) => { b.log.push(msg); if (b.log.length > LOG_LIMIT) b.log.splice(0, b.log.length - LOG_LIMIT); };
-const evasionOf = (unit, weather) => clamp((unit.mobility - 28) * 0.008 + (CLASSES[unit.cls].evasion || 0) + WEATHER[weather].evade, 0, 0.3);
+const evasionOf = (unit, weather) => clamp((unit.mobility - 28) * 0.008 + (CLASSES[unit.cls].evasion || 0) + (unit.evadeBonus || 0) + WEATHER[weather].evade, 0, 0.3);
 const frontPlayer = (b) => b.squad[b.active];
 const frontEnemy = (b) => b.enemies[b.foe];
 
@@ -73,7 +82,7 @@ function resolvePlayer(b, action, rng) {
     }
     let mul = w.attackMul;
     let ambushUsed = false;
-    if (p.ambush && cls.ambush) { mul *= cls.ambush; p.ambush = false; ambushUsed = true; }
+    if (p.ambush && cls.ambush) { mul *= cls.ambush + (p.ambushBonus || 0); p.ambush = false; ambushUsed = true; }
     if (CLASSES[e.cls].fragile) mul *= CLASSES[e.cls].fragile;
     if (action === 'attack') {
       const base = p.attack + p.aim + roll(rng, -3, 7);
@@ -88,7 +97,7 @@ function resolvePlayer(b, action, rng) {
       if (p.cls === 'arty') {
         for (const other of b.enemies) {
           if (other !== e && other.hp > 0) {
-            const splash = Math.max(5, Math.floor(dmg * 0.5));
+            const splash = Math.max(5, Math.floor(dmg * (0.5 + (p.splashBonus || 0))));
             other.hp = Math.max(0, other.hp - splash);
             say(b, `Осколки задевают ${other.name}: ${splash} урона.`);
           }
@@ -114,7 +123,7 @@ function resolvePlayer(b, action, rng) {
     const free = b.freeRepairs > 0;
     if (!free && p.energy < 2) return { ok: false, message: 'Недостаточно энергии: для ремонта нужны 2 заряда.' };
     if (free) b.freeRepairs -= 1; else p.energy -= 2;
-    const amount = Math.round(26 * (1 + b.repairPct / 100) * (cls.repairMul || 1));
+    const amount = Math.round(26 * (1 + (b.repairPct + (p.repairPct || 0)) / 100) * (cls.repairMul || 1));
     const restored = Math.min(amount, p.maxHp - p.hp);
     p.hp += restored;
     say(b, `Ремонтная бригада восстанавливает ${restored} прочности${free ? ' (бесплатный ремонт)' : ''}.`);
@@ -144,7 +153,7 @@ function resolveEnemy(b, rng) {
   const hit = (base, min) => Math.max(min, Math.round(base * w.attackMul * fragile) - Math.floor(p.armor * 0.34));
   const apply = (dmg) => {
     if (p.shield > 0) {
-      const g = CLASSES[p.cls].guardMul ?? 0.45;
+      const g = Math.max(0.15, (CLASSES[p.cls].guardMul ?? 0.45) - (p.guardBonus || 0));
       dmg = Math.max(2, Math.floor(dmg * g));
       p.shield = 0; p.armor = Math.max(0, p.armor - 4);
       p.hp = Math.max(0, p.hp - dmg);

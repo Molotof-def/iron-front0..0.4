@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { ClanPanel } from '../components/Clan';
+import { CosmeticsPanel } from '../components/Cosmetics';
+import { NotifyPanel, SettingsPanel } from '../components/Settings';
+import { ReferralPanel } from '../components/Social';
+import { Tabs } from '../components/Tabs';
 import { Bar, Btn, Panel } from '../components/ui';
-import { NotifyPanel, ReferralPanel } from '../components/Social';
 import { useGame } from '../state/GameProvider';
 import { num, timeAgo } from '../lib/format';
 import type { LeaderRow } from '../types';
@@ -13,8 +17,11 @@ const BONUS_LABEL: [string, string, string][] = [
   ['rewardPct', 'Награды операций', '%'], ['xpPct', 'Опыт командира', '%'], ['fuelCostPct', 'Расход топлива', '%'], ['powerFlat', 'Электроэнергия', ''],
 ];
 
+type PTab = 'cmd' | 'friends' | 'clan' | 'look' | 'set';
+
 export function ProfileScreen() {
   const { view, act, busy, now, markSeen } = useGame();
+  const [tab, setTab] = useState<PTab>('cmd');
   const [name, setName] = useState(view.nickname);
   const [board, setBoard] = useState<{ top: LeaderRow[]; rank: number | null } | null>(null);
   useEffect(() => { void api.leaderboard().then(setBoard).catch(() => setBoard(null)); }, [view.commander.xp]);
@@ -24,11 +31,20 @@ export function ProfileScreen() {
   const xpMax = Math.max(1, view.commander.xpNext - view.commander.xpBase);
 
   return (
-    <div className="screen profile-grid">
+    <div className="screen">
+      <Tabs<PTab> value={tab} onChange={setTab} tabs={[
+        { id: 'cmd', label: 'Командир', icon: 'profile' }, { id: 'friends', label: 'Друзья', icon: 'star', badge: view.referral.claimable || null },
+        { id: 'clan', label: 'Клан', icon: 'flag' }, { id: 'look', label: 'Оформление', icon: 'wrench' }, { id: 'set', label: 'Настройки', icon: 'info' },
+      ]} />
+      {tab === 'friends' && <div className="profile-grid"><ReferralPanel /></div>}
+      {tab === 'clan' && <div className="profile-grid"><ClanPanel /></div>}
+      {tab === 'look' && <div className="profile-grid"><CosmeticsPanel /></div>}
+      {tab === 'set' && <div className="profile-grid"><SettingsPanel /><NotifyPanel /></div>}
+      {tab === 'cmd' && <div className="profile-grid">
       <Panel title="Командир" icon="profile">
         <div className="commander">
           <div className="badge">{view.commander.level}</div>
-          <div><h2>{view.nickname}</h2><p className="muted">Уровень командира {view.commander.level} · место в рейтинге: {board?.rank ?? '—'}</p></div>
+          <div><h2>{view.nickname}</h2><p className="amber">{view.commander.rank}</p><p className="muted">Уровень командира {view.commander.level} · место в рейтинге: {board?.rank ?? '—'}</p></div>
         </div>
         <Bar value={view.commander.xp - view.commander.xpBase} max={xpMax} label="Опыт" />
         <p className="muted small">{num(view.commander.xp - view.commander.xpBase)} / {num(xpMax)} XP до следующего уровня</p>
@@ -39,8 +55,6 @@ export function ProfileScreen() {
         {view.legacy && <p className="muted small">Прогресс из версии 0.4.0 перенесён. Старое сохранение осталось нетронутым в базе.</p>}
       </Panel>
 
-      <ReferralPanel />
-      <NotifyPanel />
       <Panel title="Статистика" icon="trophy">
         <dl className="kv">
           <div><dt>Сражений</dt><dd>{num(view.stats.battles)}</dd></div>
@@ -67,6 +81,7 @@ export function ProfileScreen() {
       <Panel title="История событий" icon="bell">
         <ul className="events">{view.events.map((e) => <li key={e.id} className={`ev ev-${e.kind}`}><span>{e.text}</span><time>{timeAgo(e.t, now())}</time></li>)}</ul>
       </Panel>
+      </div>}
     </div>
   );
 }

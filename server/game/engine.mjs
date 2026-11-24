@@ -18,17 +18,24 @@ export const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 export const nextDayAt = (ms) => (Math.floor(ms / DAY) + 1) * DAY;
 
 // ---------- Создание состояния ----------
+const newNotify = (now, upTo) => ({
+  enabled: true, upTo, types: { builds: true, fuel: false, bonus: false, event: false },
+  mark: { fuelSent: true, bonusDay: '', eventWeek: D.weekIndex(now) }, lastSeen: now,
+});
+const newPvp = (now) => ({ rating: D.PVP.startRating, bestEver: D.PVP.startRating, season: D.seasonKey(now), played: 0, wins: 0, losses: 0, day: '', used: 0, recent: [], defenseIds: [], defense: [], prev: null });
+
 export function newPlayer(now, nickname = 'Командир') {
   return {
     schemaVersion: SCHEMA_VERSION, createdAt: now, nickname, xp: 0,
     res: { ...D.START_RESOURCES }, lastTick: now,
     buildings: Object.fromEntries(D.BUILDING_ORDER.map((id) => [id, D.BUILDINGS[id].startLevel])),
     buildQueue: [], produceQueue: [], researchDone: [], researchQueue: [],
-    tanks: { [D.STARTER_TANK]: { level: 1 } }, squad: [D.STARTER_TANK],
+    tanks: { [D.STARTER_TANK]: { level: 1, xp: 0, skills: {} } }, squad: [D.STARTER_TANK],
     battle: null, missionClears: {},
     stats: { battles: 0, wins: 0, losses: 0, built: 0, researched: 0, upgrades: 0, produced: 0, bossWins: 0, questsClaimed: 0 },
     tutorial: { step: 0, done: false }, bonus: { lastDay: '', streak: 0 },
-    notify: { enabled: true, upTo: 0 }, referral: { welcomed: false, claimed: 0, milestones: [] }, weekly: { week: -1, progress: 0, claimed: false },
+    notify: newNotify(now, 0), referral: { welcomed: false, claimed: 0, milestones: [] }, weekly: { week: -1, progress: 0, claimed: false },
+    pvp: newPvp(now), pass: { season: D.seasonKey(now), xp: 0, claimed: [] }, clan: { week: -1, points: 0, claimedWeek: -1 }, cosmetics: {},
     daily: { day: '', quests: [] }, achievementsClaimed: [],
     events: [], eventSeq: 0, idSeq: 1, recent: [], legacy: null,
   };
@@ -122,7 +129,15 @@ export const questTemplate = (tpl) => D.QUEST_TEMPLATES.find((q) => q.tpl === tp
 // ---------- Миграция формата состояния «на лету» ----------
 function ensureProgress(state) {
   state.stats.questsClaimed ??= 0;
-  state.notify ??= { enabled: true, upTo: state.eventSeq }; // старым игрокам не шлём уведомления о прошлом
+  state.notify ??= newNotify(state.lastTick, state.eventSeq); // старым игрокам не шлём уведомления о прошлом
+  state.notify.types ??= { builds: true, fuel: false, bonus: false, event: false };
+  state.notify.mark ??= { fuelSent: true, bonusDay: '', eventWeek: D.weekIndex(state.lastTick) };
+  state.notify.lastSeen ??= state.lastTick;
+  state.pvp ??= newPvp(state.lastTick);
+  state.pass ??= { season: D.seasonKey(state.lastTick), xp: 0, claimed: [] };
+  state.clan ??= { week: -1, points: 0, claimedWeek: -1 };
+  state.cosmetics ??= {};
+  for (const t of Object.values(state.tanks)) { t.xp ??= 0; t.skills ??= {}; }
   state.referral ??= { welcomed: false, claimed: 0, milestones: [] };
   state.weekly ??= { week: -1, progress: 0, claimed: false };
   state.bonus ??= { lastDay: '', streak: 0 };
@@ -144,21 +159,52 @@ export function weeklyStatus(state, now) {
 
 // ---------- Уведомления бота ----------
 const NOTIFY_ICON = { build: '🏗', produce: '🛠', research: '🔬' };
-/** Время ближайшего завершения таймера (для планировщика уведомлений) или null. */
-export function nextEventAt(state) {
-  const ends = [...state.buildQueue, ...state.produceQueue, ...state.researchQueue].map((q) => q.endsAt);
-  return ends.length ? Math.min(...ends) : null;
+const activeWithin = (state, now, days) => now - state.notify.lastSeen <= days * DAY;
+/** Моменты напоминаний, которые ещё не отправлены и могут сработать (для неактивных игроков их нет). */
+function reminderTimes(state, now) {
+  const n = state.notify; const out = [];
+  if (!n.enabled) return out;
+  if (n.types.fuel && !n.mark.fuelSent && activeWithin(state, now, 2)) {
+    const caps = capsOf(state); const rate = ratesOf(state).fuel;
+    out.push(state.res.fuel >= caps.fuel - 0.5 ? now : now + Math.ceil(((caps.fuel - state.res.fuel) / Math.max(0.1, rate)) * HOUR));
+  }
+  if (n.types.bonus && n.mark.bonusDay !== dayKey(now) && bonusStatus(state, now).available && activeWithin(state, now, D.REMIND.activeDays)) {
+    out.push(Math.floor(now / DAY) * DAY + D.REMIND.bonusHourUtc * HOUR);
+  }
+  if (n.types.event && n.mark.eventWeek !== D.weekIndex(now) && activeWithin(state, now, D.REMIND.eventActiveDays)) {
+    out.push(D.weekEndsAt(now) - 7 * DAY + D.REMIND.eventHourUtc * HOUR);
+  }
+  return out;
 }
-/** Забирает ещё не отправленные уведомления о завершённых таймерах и помечает их отправленными. */
-export function takeNotifications(state) {
+/** Время ближайшего события для планировщика: завершение таймера или напоминание. null — ничего не ждём. */
+export function nextEventAt(state) {
+  const now = state.lastTick;
+  const ends = state.notify?.types?.builds === false ? [] : [...state.buildQueue, ...state.produceQueue, ...state.researchQueue].map((q) => q.endsAt);
+  const all = [...ends, ...reminderTimes(state, now)];
+  return all.length ? Math.min(...all) : null;
+}
+/** Забирает уведомления, которые пора отправить, и помечает их отправленными. */
+export function takeNotifications(state, now = state.lastTick) {
   const n = state.notify;
   const fresh = state.events.filter((e) => e.id > n.upTo && NOTIFY_ICON[e.kind]).reverse();
   n.upTo = state.eventSeq;
-  if (!n.enabled || !fresh.length) return [];
-  return fresh.map((e) => `${NOTIFY_ICON[e.kind]} ${e.text}`);
+  if (!n.enabled) return [];
+  const lines = n.types.builds ? fresh.map((e) => `${NOTIFY_ICON[e.kind]} ${e.text}`) : [];
+  if (n.types.fuel && !n.mark.fuelSent && activeWithin(state, now, 2) && state.res.fuel >= capsOf(state).fuel - 0.5) {
+    n.mark.fuelSent = true; lines.push('⛽ Топливо полностью восстановлено — пора на операцию!');
+  }
+  const day = dayKey(now);
+  if (n.types.bonus && n.mark.bonusDay !== day && now >= Math.floor(now / DAY) * DAY + D.REMIND.bonusHourUtc * HOUR && bonusStatus(state, now).available && activeWithin(state, now, D.REMIND.activeDays)) {
+    n.mark.bonusDay = day; lines.push('🎁 Ежедневный бонус ждёт — заберите его и продлите серию!');
+  }
+  const week = D.weekIndex(now);
+  if (n.types.event && n.mark.eventWeek !== week && now >= D.weekEndsAt(now) - 7 * DAY + D.REMIND.eventHourUtc * HOUR && activeWithin(state, now, D.REMIND.eventActiveDays)) {
+    n.mark.eventWeek = week; const ev = D.eventForWeek(now); lines.push(`⚡ Событие недели: ${ev.name}. ${ev.desc}`);
+  }
+  return lines;
 }
 /** Игрок сейчас в игре и видит события сам — уведомления о них не нужны. */
-export const markEventsSeen = (state) => { state.notify.upTo = state.eventSeq; };
+export const markEventsSeen = (state) => { state.notify.upTo = state.eventSeq; state.notify.lastSeen = state.lastTick; };
 
 // ---------- Обучение ----------
 /** Выполнено ли условие текущего шага обучения. Проверяется только по серверному состоянию. */
@@ -196,7 +242,7 @@ function completeItem(state, item) {
     state.stats.built += 1;
     pushEvent(state, 'build', `${D.BUILDINGS[item.building].name}: уровень ${item.toLevel} готов.`, item.endsAt);
   } else if (item.kind === 'produce') {
-    state.tanks[item.tankId] = { level: 1 };
+    state.tanks[item.tankId] = { level: 1, xp: 0, skills: {} };
     state.stats.produced += 1;
     pushEvent(state, 'produce', `Танк «${D.TANK_BY_ID[item.tankId].name}» выпущен и поступил в ангар.`, item.endsAt);
   } else if (item.kind === 'research') {
@@ -227,6 +273,11 @@ export function settle(state, now) {
   ensureProgress(state);
   ensureDaily(state, now);
   ensureWeekly(state, now);
+  ensureSeason(state, now);
+  ensurePvpDay(state, now);
+  ensureClanWeek(state, now);
+  refreshDefense(state);
+  if (state.res.fuel < capsOf(state).fuel - 0.5) state.notify.mark.fuelSent = false;
   return state;
 }
 
@@ -367,7 +418,7 @@ function startBattle(state, ctx, { missionId, squad }) {
   const bonuses = bonusesOf(state);
   state.res.fuel -= fuelCost(state, mission);
   state.squad = [...squad];
-  const units = squad.map((id) => B.makePlayerUnit(D.TANK_BY_ID[id], state.tanks[id].level, bonuses, mission));
+  const units = squad.map((id) => B.makePlayerUnit(D.TANK_BY_ID[id], state.tanks[id].level, combinedBonuses(state, id, bonuses), mission, crewEffects(state, id)));
   const enemies = mission.enemies.map((e) => B.makeEnemyUnit(D.TANK_BY_ID[e.tankId], e.level, e.role, mission));
   state.battle = B.createBattle({
     id: nextId(state), mission, squad: units, enemies, now: ctx.now,
@@ -377,6 +428,7 @@ function startBattle(state, ctx, { missionId, squad }) {
 }
 
 function finishBattle(state, ctx) {
+  if (state.battle.pvp) return finishDuel(state, ctx);
   const b = state.battle; const mission = D.MISSION_BY_ID[b.missionId];
   const won = b.status === 'won';
   const first = won && !state.missionClears[mission.id];
@@ -384,6 +436,9 @@ function finishBattle(state, ctx) {
   b.reward = B.computeReward(mission, b, bonusesOf(state), state.buildings.training, first, ev.types.includes(mission.type) ? ev.mul : 1);
   state.stats.battles += 1;
   track(state, 'battles');
+  grantCrewXp(state, b.squad, won, mission.type === 'boss');
+  addPassXp(state, won ? D.PASS.xp.win : D.PASS.xp.loss);
+  if (won) addClanPoints(state, D.CLAN.points[mission.type] || 5);
   if (won) {
     state.stats.wins += 1;
     state.weekly.progress = Math.min(D.WEEKLY_GOAL.wins, state.weekly.progress + 1);
@@ -424,6 +479,7 @@ function claimQuest(state, ctx, { questId }) {
   if (q.progress < q.goal) fail('not_done', 'Задание ещё не выполнено.');
   q.claimed = true;
   state.stats.questsClaimed += 1;
+  addPassXp(state, D.PASS.xp.quest);
   const reward = questTemplate(q.tpl).reward(q.goal);
   giveReward(state, reward, ctx.now);
   pushEvent(state, 'reward', `Задание «${questTemplate(q.tpl).name}» выполнено.`, ctx.now);
@@ -490,12 +546,15 @@ function claimWeekly(state, ctx) {
   if (w.claimed) fail('already_claimed', 'Награда недели уже получена.', 409);
   if (w.progress < D.WEEKLY_GOAL.wins) fail('not_done', 'Недельная цель ещё не выполнена.');
   w.claimed = true;
+  addPassXp(state, D.PASS.xp.weekly);
   giveReward(state, D.WEEKLY_GOAL.reward, ctx.now);
   pushEvent(state, 'reward', 'Награда недельной цели получена.', ctx.now);
 }
-function setNotify(state, ctx, { enabled }) {
-  state.notify.enabled = Boolean(enabled);
+function setNotify(state, ctx, { enabled, types }) {
+  if (enabled !== undefined) state.notify.enabled = Boolean(enabled);
+  if (types && typeof types === 'object') for (const k of D.NOTIFY_TYPES) if (typeof types[k] === 'boolean') state.notify.types[k] = types[k];
   state.notify.upTo = state.eventSeq;
+  state.notify.mark.fuelSent = state.res.fuel >= capsOf(state).fuel - 0.5; // не слать «бак полон», если он уже полон
 }
 /** Приветственный бонус приглашённому: выдаётся один раз при первом входе после перехода по ссылке друга. */
 export function applyReferralWelcome(state, now) {
@@ -531,12 +590,234 @@ function setNickname(state, ctx, { nickname }) {
   state.nickname = n;
 }
 
+
+// ---------- Экипаж и навыки ----------
+export const crewInfo = (tank, cls) => {
+  const points = Math.min(D.CREW.maxPoints, Math.floor(tank.xp / D.CREW.xpPerPoint));
+  const spent = Object.values(tank.skills).reduce((a, b) => a + b, 0);
+  return { xp: tank.xp, points, spent, free: Math.max(0, points - spent), skills: { ...tank.skills }, nextAt: points >= D.CREW.maxPoints ? null : (points + 1) * D.CREW.xpPerPoint };
+};
+const CREW_KEYS = ['attackPct', 'armorPct', 'hpPct', 'mobilityFlat', 'repairPct', 'evadeBonus', 'guardBonus', 'ambushBonus', 'splashBonus'];
+export function crewEffects(state, tankId) {
+  const out = Object.fromEntries(CREW_KEYS.map((k) => [k, 0]));
+  const tank = state.tanks[tankId]; const def = D.TANK_BY_ID[tankId];
+  if (!tank || !def) return out;
+  for (const sk of D.skillsFor(def.class)) {
+    const rank = Math.min(sk.max, tank.skills[sk.id] || 0);
+    for (const [k, v] of Object.entries(sk.effect)) out[k] += v * rank;
+  }
+  return out;
+}
+/** Бонусы исследований плюс экипажа конкретной машины. */
+export function combinedBonuses(state, tankId, base = bonusesOf(state)) {
+  const crew = crewEffects(state, tankId);
+  return { ...base, attackPct: base.attackPct + crew.attackPct, armorPct: base.armorPct + crew.armorPct, hpPct: base.hpPct + crew.hpPct, mobilityFlat: base.mobilityFlat + crew.mobilityFlat };
+}
+function learnSkill(state, ctx, { tankId, skill }) {
+  const tank = state.tanks[tankId]; const def = D.TANK_BY_ID[tankId];
+  if (!tank) fail('not_owned', 'Машины нет в ангаре.');
+  const sk = D.skillsFor(def.class).find((x) => x.id === skill);
+  if (!sk) fail('unknown_skill', 'Такого навыка нет у этой машины.');
+  const info = crewInfo(tank, def.class);
+  if ((tank.skills[skill] || 0) >= sk.max) fail('skill_max', 'Навык изучен до максимума.');
+  if (info.free < 1) fail('no_points', 'Нет свободных очков экипажа. Очки даёт опыт машины в боях.');
+  tank.skills[skill] = (tank.skills[skill] || 0) + 1;
+  pushEvent(state, 'upgrade', `${def.name}: навык «${sk.name}» ${tank.skills[skill]} ур.`, ctx.now);
+}
+function respecCrew(state, ctx, { tankId }) {
+  const tank = state.tanks[tankId]; const def = D.TANK_BY_ID[tankId];
+  if (!tank) fail('not_owned', 'Машины нет в ангаре.');
+  const spent = Object.values(tank.skills).reduce((a, b) => a + b, 0);
+  if (!spent) fail('nothing_to_reset', 'Навыки не изучены.');
+  const cost = { credits: spent * D.CREW.respecPerPoint };
+  if (!canAfford(state, cost)) fail('no_resources', `Не хватает ресурсов: ${costText(missing(state, cost))}.`);
+  spend(state, cost);
+  tank.skills = {};
+  pushEvent(state, 'info', `${def.name}: навыки экипажа сброшены.`, ctx.now);
+}
+const grantCrewXp = (state, units, won, boss) => {
+  for (const u of units) {
+    const t = state.tanks[u.tankId];
+    if (t) t.xp = Math.min(D.CREW.maxPoints * D.CREW.xpPerPoint + 100, t.xp + Math.round((won ? D.CREW.xpWin : D.CREW.xpLoss) * (boss ? 1.5 : 1)));
+  }
+};
+
+// ---------- Сезонный пропуск ----------
+export const passLevel = (state) => Math.min(D.PASS.levels, Math.floor(state.pass.xp / D.PASS.xpPerLevel));
+const addPassXp = (state, n) => { state.pass.xp = Math.min(D.PASS.levels * D.PASS.xpPerLevel, state.pass.xp + n); };
+function claimPass(state, ctx, { level }) {
+  const row = D.PASS_REWARDS.find((r) => r.level === level);
+  if (!row) fail('not_found', 'Такого уровня нет.', 404);
+  if (level > passLevel(state)) fail('not_done', 'Уровень пропуска ещё не достигнут.');
+  if (state.pass.claimed.includes(level)) fail('already_claimed', 'Награда уже получена.', 409);
+  state.pass.claimed.push(level);
+  giveReward(state, row.reward, ctx.now);
+  pushEvent(state, 'reward', `Сезонный пропуск: награда уровня ${level} получена.`, ctx.now);
+}
+
+// ---------- Косметика ----------
+export function cosmeticMetric(state, metric) {
+  switch (metric) {
+    case 'commander': return commanderLevel(state);
+    case 'wins': return state.stats.wins;
+    case 'bossWins': return state.stats.bossWins;
+    case 'passLevel': return passLevel(state);
+    case 'pvpBest': return state.pvp.bestEver;
+    default: return 0;
+  }
+}
+export const cosmeticUnlocked = (state, item) => !item.req || cosmeticMetric(state, item.req.metric) >= item.req.goal;
+function equipCosmetic(state, ctx, { tankId, camo, emblem }) {
+  if (!state.tanks[tankId]) fail('not_owned', 'Машины нет в ангаре.');
+  const c = D.CAMOS.find((x) => x.id === camo); const e = D.EMBLEMS.find((x) => x.id === emblem);
+  if (!c || !e) fail('unknown_cosmetic', 'Неизвестный вариант оформления.');
+  if (!cosmeticUnlocked(state, c) || !cosmeticUnlocked(state, e)) fail('locked', 'Это оформление ещё не открыто.');
+  state.cosmetics[tankId] = { camo: c.id, emblem: e.id };
+}
+
+// ---------- Дуэли и сезоны рейтинга ----------
+function ensureSeason(state, now) {
+  const key = D.seasonKey(now);
+  const p = state.pvp;
+  if (p.season === key) return;
+  if (p.season) {
+    p.prev = { season: p.season, rating: p.rating, tier: D.tierFor(p.rating).id, claimed: p.played === 0 };
+    const keep = Math.floor(Math.max(0, p.rating - D.PVP.startRating) / 2); // мягкий сброс: половина прироста
+    p.rating = D.PVP.startRating + keep;
+  }
+  p.season = key; p.played = 0; p.wins = 0; p.losses = 0;
+  state.pass = { season: key, xp: 0, claimed: [] };
+}
+function ensurePvpDay(state, now) {
+  const day = dayKey(now);
+  if (state.pvp.day !== day) { state.pvp.day = day; state.pvp.used = 0; }
+  state.pvp.recent = state.pvp.recent.filter((r) => now - r.t < DAY);
+}
+function ensureClanWeek(state, now) {
+  const w = D.weekIndex(now);
+  if (state.clan.week !== w) { state.clan.week = w; state.clan.points = 0; }
+}
+const powerOfUnit = (u) => Math.round(u.hp + u.attack * 3 + u.armor * 2);
+/** Снимок защитного отряда: другие игроки сражаются с ним в дуэлях. Параметры включают исследования и экипаж. */
+export function refreshDefense(state) {
+  const ids = state.pvp.defenseIds.filter((id) => state.tanks[id]);
+  const use = ids.length ? ids : state.squad.filter((id) => state.tanks[id]);
+  const base = bonusesOf(state);
+  state.pvp.defense = use.slice(0, 3).map((id) => {
+    const def = D.TANK_BY_ID[id]; const t = state.tanks[id];
+    const st = B.tankStats(def, t.level, combinedBonuses(state, id, base));
+    const cos = state.cosmetics[id] || { camo: 'default', emblem: 'none' };
+    return { tankId: id, level: t.level, hp: st.hp, attack: st.attack, armor: st.armor, mobility: st.mobility, camo: cos.camo, emblem: cos.emblem };
+  });
+}
+export const defensePower = (defense) => defense.reduce((a, u) => a + powerOfUnit(u), 0);
+function setDefense(state, ctx, { squad }) {
+  throwIf(checkSquad(state, null, squad));
+  state.pvp.defenseIds = [...squad];
+  refreshDefense(state);
+  pushEvent(state, 'info', 'Защитный отряд дуэлей обновлён.', ctx.now);
+}
+const BOT_NAMES = ['Лейтенант Орлов', 'Сержант Железнов', 'Капитан Громов', 'Полковник Стальной', 'Майор Бронев', 'Старшина Танков'];
+/** Тренировочный противник: детерминирован по игроку, дню и слоту, поэтому сервер может проверить его без базы данных. */
+export function makeBot(state, slot, now) {
+  const rng = seededRng(`${state.createdAt}:${dayKey(now)}:bot${slot}`);
+  const lvl = commanderLevel(state);
+  const tier = lvl < 2 ? 1 : lvl < 4 ? 2 : lvl < 7 ? 3 : lvl < 12 ? 4 : 5;
+  const pool = D.TANKS.filter((t) => t.tier <= tier && t.tier >= Math.max(1, tier - 1));
+  const count = Math.max(1, Math.min(3, state.squad.length));
+  const levels = Object.values(state.tanks).map((t) => t.level);
+  const avg = Math.max(1, Math.round(levels.reduce((a, b) => a + b, 0) / Math.max(1, levels.length)));
+  const skew = 0.92 + slot * 0.05;
+  const defense = Array.from({ length: count }, () => {
+    const def = pool[Math.floor(rng() * pool.length)];
+    const level = Math.max(1, Math.min(14, avg + Math.floor(rng() * 3) - 1));
+    const st = B.tankStats(def, level, {});
+    return { tankId: def.id, level, hp: Math.round(st.hp * skew), attack: Math.round(st.attack * skew), armor: Math.round(st.armor * skew), mobility: st.mobility, camo: 'default', emblem: 'none' };
+  });
+  return { id: `bot:${slot}`, nickname: BOT_NAMES[(slot + Math.floor(rng() * 3)) % BOT_NAMES.length], level: Math.max(1, lvl + slot - 1), rating: state.pvp.rating + (slot - 1) * 40, bot: true, defense };
+}
+const DUEL_ARENAS = ['desert', 'hills', 'factory', 'coast'];
+const DUEL_WEATHER = ['clear', 'rain', 'sand', 'fog'];
+const ROLE_BY_CLASS = { arty: 'skirmisher', light: 'skirmisher', heavy: 'guardian', td: 'assault', medium: 'assault' };
+function startDuel(state, ctx, { opponentId, squad }) {
+  if (state.battle) fail(state.battle.status === 'active' ? 'battle_active' : 'claim_pending', state.battle.status === 'active' ? 'Сначала завершите текущий бой.' : 'Сначала заберите награду за прошлый бой.', 409);
+  if (commanderLevel(state) < D.PVP.minLevel) fail('commander_level', `Дуэли открываются с ${D.PVP.minLevel} уровня командира.`);
+  if (state.pvp.used >= D.PVP.dailyTickets) fail('no_tickets', 'Дуэльные жетоны на сегодня закончились. Они обновляются каждые сутки.');
+  throwIf(checkSquad(state, null, squad));
+  let opp;
+  if (typeof opponentId === 'string' && /^bot:[0-2]$/.test(opponentId)) opp = makeBot(state, Number(opponentId.slice(4)), ctx.now);
+  else {
+    opp = ctx.opponent;
+    if (!opp || opp.id !== opponentId || !Array.isArray(opp.defense) || !opp.defense.length) fail('bad_opponent', 'Соперник недоступен. Обновите список.');
+    if (Math.abs(opp.rating - state.pvp.rating) > D.PVP.maxWindow) fail('bad_opponent', 'Соперник слишком далёк по рейтингу.');
+    if (state.pvp.recent.some((r) => r.id === opp.id)) fail('recent_opponent', 'С этим игроком вы уже сражались сегодня.');
+  }
+  const enemies = opp.defense.map((d) => ({ d, def: D.TANK_BY_ID[d.tankId] })).filter((x) => x.def)
+    .map(({ d, def }) => B.makeSnapshotUnit(def, d, ROLE_BY_CLASS[def.class]));
+  if (!enemies.length) fail('bad_opponent', 'У соперника нет боеспособного отряда.');
+  const rng = seededRng(`${opp.id}:${dayKey(ctx.now)}:${state.pvp.used}`);
+  const mission = { id: 'pvp', name: `Дуэль: ${opp.nickname}`, arena: DUEL_ARENAS[Math.floor(rng() * 4)], weather: DUEL_WEATHER[Math.floor(rng() * 4)], diff: 1, turnLimit: D.PVP.turnLimit, armorBonus: 0 };
+  const base = bonusesOf(state);
+  const units = squad.map((id) => {
+    const eff = crewEffects(state, id);
+    return B.makePlayerUnit(D.TANK_BY_ID[id], state.tanks[id].level, combinedBonuses(state, id, base), mission, eff);
+  });
+  state.squad = [...squad];
+  state.pvp.used += 1;
+  if (!opp.bot) state.pvp.recent.push({ id: opp.id, t: ctx.now });
+  state.battle = B.createBattle({
+    id: nextId(state), mission, squad: units, enemies, now: ctx.now, freeRepairs: D.freeRepairs(state.buildings.repair), repairPct: 8 * state.buildings.repair,
+    title: mission.name, pvp: { opponent: { id: opp.id, nickname: opp.nickname, level: opp.level, rating: opp.rating, bot: Boolean(opp.bot) } },
+  });
+  pushEvent(state, 'battle', `Начата дуэль против ${opp.nickname}.`, ctx.now);
+}
+function finishDuel(state, ctx) {
+  const b = state.battle; const won = b.status === 'won'; const p = state.pvp; const opp = b.pvp.opponent;
+  const K = opp.bot ? D.PVP.kBot : D.PVP.kPlayer;
+  const expected = 1 / (1 + Math.pow(10, (opp.rating - p.rating) / 400));
+  const delta = Math.round(K * ((won ? 1 : 0) - expected));
+  const before = p.rating;
+  p.rating = Math.max(0, p.rating + delta);
+  p.bestEver = Math.max(p.bestEver, p.rating);
+  p.played += 1; if (won) p.wins += 1; else p.losses += 1;
+  const mul = opp.bot ? D.PVP.botMul : 1;
+  const base = won ? D.PVP.win : D.PVP.loss;
+  b.reward = { credits: Math.round((base.credits || 0) * mul), steel: Math.round((base.steel || 0) * mul), scrap: Math.round((base.scrap || 0) * mul), science: 0, fuel: 0, xp: Math.round((base.xp || 0) * mul), bonus: false, firstClear: false, event: false, rating: p.rating - before };
+  state.stats.battles += 1;
+  track(state, 'battles');
+  grantCrewXp(state, b.squad, won, false);
+  addPassXp(state, D.PASS.xp.pvp);
+  if (won) addClanPoints(state, D.CLAN.points.pvp);
+  pushEvent(state, won ? 'win' : 'loss', `${won ? 'Победа' : 'Поражение'} в дуэли против ${opp.nickname} (${p.rating - before >= 0 ? '+' : ''}${p.rating - before}).`, ctx.now);
+}
+function claimSeason(state, ctx) {
+  const prev = state.pvp.prev;
+  if (!prev || prev.claimed) fail('nothing_to_claim', 'Награды прошлого сезона уже получены или недоступны.', 409);
+  const tier = D.PVP_TIERS.find((t) => t.id === prev.tier) || D.PVP_TIERS[0];
+  prev.claimed = true;
+  giveReward(state, tier.reward, ctx.now);
+  pushEvent(state, 'reward', `Награда сезона «${D.seasonTitle(prev.season)}»: ${tier.name}.`, ctx.now);
+}
+
+// ---------- Кланы (очки и награды; состав клана хранится в БД) ----------
+function addClanPoints(state, n) { state.clan.points += n; }
+function claimClan(state, ctx) {
+  const c = ctx.clan;
+  if (!c || !c.inClan) fail('no_clan', 'Вы не состоите в клане.');
+  if (state.clan.claimedWeek === state.clan.week) fail('already_claimed', 'Награда клана за эту неделю уже получена.', 409);
+  if (c.total < D.clanGoal(c.members)) fail('not_done', 'Клан ещё не выполнил недельную цель.');
+  state.clan.claimedWeek = state.clan.week;
+  giveReward(state, D.CLAN.reward, ctx.now);
+  addPassXp(state, 30);
+  pushEvent(state, 'reward', 'Награда клана за неделю получена.', ctx.now);
+}
+
 const HANDLERS = {
   'build/start': startBuilding, 'build/cancel': cancelBuilding,
   'tank/produce': produceTank, 'tank/produce-cancel': cancelProduction, 'tank/upgrade': upgradeTank, 'squad/set': setSquad,
   'research/start': startResearch, 'research/cancel': cancelResearch,
   'battle/start': startBattle, 'battle/action': battleAction, 'battle/claim': claimBattle,
-  'quest/claim': claimQuest, 'weekly/claim': claimWeekly, 'profile/notify': setNotify, 'referral/claim': claimReferral, 'tutorial/claim': claimTutorial, 'tutorial/skip': skipTutorial, 'bonus/claim': claimBonus, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
+  'quest/claim': claimQuest, 'weekly/claim': claimWeekly, 'tank/skill': learnSkill, 'tank/respec': respecCrew, 'pass/claim': claimPass, 'cosmetic/equip': equipCosmetic, 'pvp/defense': setDefense, 'pvp/start': startDuel, 'pvp/season-claim': claimSeason, 'clan/claim': claimClan, 'profile/notify': setNotify, 'referral/claim': claimReferral, 'tutorial/claim': claimTutorial, 'tutorial/skip': skipTutorial, 'bonus/claim': claimBonus, 'achievement/claim': claimAchievement, 'profile/nickname': setNickname,
 };
 export const ACTION_NAMES = Object.keys(HANDLERS);
 
@@ -547,7 +828,7 @@ export const ACTION_NAMES = Object.keys(HANDLERS);
 export function perform(state, action, payload, opts) {
   const handler = HANDLERS[action];
   if (!handler) fail('unknown_action', 'Неизвестное действие.', 404);
-  const ctx = { now: opts.now, rng: opts.rng || Math.random, timeScale: opts.timeScale || 1, referral: opts.referral || null };
+  const ctx = { now: opts.now, rng: opts.rng || Math.random, timeScale: opts.timeScale || 1, referral: opts.referral || null, opponent: opts.opponent || null, clan: opts.clan || null };
   const next = structuredClone(state);
   settle(next, ctx.now);
   const requestId = typeof opts.requestId === 'string' && /^[\w-]{8,64}$/.test(opts.requestId) ? opts.requestId : null;

@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { Icon } from '../components/Icon';
+import { PassPanel } from '../components/Pass';
+import { Tabs } from '../components/Tabs';
 import { Bar, Btn, Panel, ResIcon } from '../components/ui';
 import { WeeklyPanel } from '../components/Social';
 import { useGame } from '../state/GameProvider';
@@ -14,12 +17,21 @@ function Reward({ r }: { r: Cost & { xp?: number } }) {
   );
 }
 
+type QTab = 'daily' | 'pass' | 'event';
+
 export function QuestsScreen() {
   const { view, config, act, busy, now } = useGame();
+  const [tab, setTab] = useState<QTab>('daily');
+  const passReady = view.pass.level - view.pass.claimed.length;
   const left = Math.max(0, (view.questsResetAt - now()) / 1000);
   return (
-    <div className="screen quests-grid">
-      <WeeklyPanel />
+    <div className="screen">
+      <Tabs<QTab> value={tab} onChange={setTab} tabs={[
+        { id: 'daily', label: 'Задания', icon: 'quests' }, { id: 'pass', label: 'Пропуск', icon: 'star', badge: passReady > 0 ? passReady : null }, { id: 'event', label: 'Событие', icon: 'flag' },
+      ]} />
+      {tab === 'pass' && <PassPanel />}
+      {tab === 'event' && <div className="quests-grid"><WeeklyPanel /></div>}
+      {tab === 'daily' && <div className="quests-grid">
       <Panel title="Ежедневные задания" icon="quests" right={<span className="muted small"><Icon name="clock" size={13} /> Обновление через {duration(left)}</span>}>
         <ul className="qlist">
           {view.quests.map((q) => {
@@ -54,6 +66,7 @@ export function QuestsScreen() {
           })}
         </ul>
       </Panel>
+      </div>}
     </div>
   );
 }

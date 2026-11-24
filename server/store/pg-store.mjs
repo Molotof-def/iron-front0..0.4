@@ -1,23 +1,51 @@
 // Хранилище состояния игроков в PostgreSQL. Каждая операция выполняется в транзакции
 // со строгой блокировкой строки игрока (SELECT ... FOR UPDATE), поэтому параллельные запросы
 // одного игрока обрабатываются строго по очереди и не могут продублировать награды.
-export function createPgStore(pool, { createState, summarize, qualifyLevel = 3 }) {
+//
+// getLevel() возвращает уровень применённой схемы БД. Дополнительные функции (уведомления, рефералы, дуэли, кланы)
+// включаются только если соответствующая миграция применена; иначе основная игра продолжает работать без них.
+import { GameError } from '../game/engine.mjs';
+
+const unavailable = () => new GameError('feature_unavailable', 'Функция временно недоступна. Попробуйте позже.', 503);
+
+export function createPgStore(pool, { createState, summarize, qualifyLevel = 3, getLevel = () => 99 }) {
+  /** Колонки для записи состояния в зависимости от уровня схемы. */
+  const columns = (lvl, sum, state) => {
+    const c = [['nickname', sum.nickname], ['state', JSON.stringify(state), '::jsonb'], ['xp', sum.xp], ['level', sum.level], ['wins', sum.wins]];
+    if (lvl >= 3) c.push(['next_event_at', sum.nextEventAt], ['notify_enabled', sum.notifyEnabled]);
+    if (lvl >= 4) c.push(['rating', sum.rating], ['has_defense', sum.hasDefense], ['clan_points', sum.clanPoints], ['clan_week', sum.clanWeek]);
+    return c;
+  };
+  const tx = async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const out = await fn(client);
+      await client.query('COMMIT');
+      return out;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally { client.release(); }
+  };
+  const dup = (error) => error && error.code === '23505';
+
   return {
     kind: 'postgres',
     async transact(id, profile, fn) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
+      const lvl = getLevel();
+      return tx(async (client) => {
         let found = await client.query('SELECT state FROM iron_players WHERE telegram_id = $1 FOR UPDATE', [id]);
         if (!found.rows.length) {
           const legacyRow = await client.query('SELECT save_data FROM player_saves WHERE telegram_id = $1', [id]);
           const legacy = legacyRow.rows[0]?.save_data ?? null;
           const initial = createState(legacy, profile);
-          const sum = summarize(initial);
+          const c = columns(lvl, summarize(initial), initial);
+          const names = ['telegram_id', ...c.map((x) => x[0]), 'imported_legacy'];
+          const marks = ['$1', ...c.map((x, i) => `$${i + 2}${x[2] || ''}`), `$${c.length + 2}`];
           await client.query(
-            `INSERT INTO iron_players (telegram_id, nickname, state, xp, level, wins, imported_legacy, next_event_at, notify_enabled)
-             VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9) ON CONFLICT (telegram_id) DO NOTHING`,
-            [id, sum.nickname, JSON.stringify(initial), sum.xp, sum.level, sum.wins, Boolean(legacy), sum.nextEventAt, sum.notifyEnabled],
+            `INSERT INTO iron_players (${names.join(', ')}) VALUES (${marks.join(', ')}) ON CONFLICT (telegram_id) DO NOTHING`,
+            [id, ...c.map((x) => x[1]), Boolean(legacy)],
           );
           if (legacy) await client.query(`INSERT INTO iron_events (telegram_id, action, payload) VALUES ($1, 'legacy_import', '{}'::jsonb)`, [id]);
           found = await client.query('SELECT state FROM iron_players WHERE telegram_id = $1 FOR UPDATE', [id]);
@@ -25,28 +53,25 @@ export function createPgStore(pool, { createState, summarize, qualifyLevel = 3 }
         const out = await fn(found.rows[0].state);
         if (out.state) {
           const sum = summarize(out.state);
+          const c = columns(lvl, sum, out.state);
           await client.query(
-            `UPDATE iron_players SET state = $2::jsonb, nickname = $3, xp = $4, level = $5, wins = $6,
-               next_event_at = $7, notify_enabled = $8, updated_at = NOW() WHERE telegram_id = $1`,
-            [id, JSON.stringify(out.state), sum.nickname, sum.xp, sum.level, sum.wins, sum.nextEventAt, sum.notifyEnabled],
+            `UPDATE iron_players SET ${c.map((x, i) => `${x[0]} = $${i + 2}${x[2] || ''}`).join(', ')}, updated_at = NOW() WHERE telegram_id = $1`,
+            [id, ...c.map((x) => x[1])],
           );
           // Друг засчитывается пригласившему после достижения нужного уровня командира.
-          if (sum.level >= qualifyLevel) await client.query('UPDATE iron_referrals SET qualified = TRUE WHERE invitee = $1 AND NOT qualified', [id]);
+          if (lvl >= 3 && sum.level >= qualifyLevel) await client.query('UPDATE iron_referrals SET qualified = TRUE WHERE invitee = $1 AND NOT qualified', [id]);
         }
         for (const a of out.audit || []) {
           await client.query('INSERT INTO iron_events (telegram_id, action, payload) VALUES ($1, $2, $3::jsonb)', [id, a.action, JSON.stringify(a.payload || {})]);
         }
-        await client.query('COMMIT');
         return out.result;
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
-        throw error;
-      } finally {
-        client.release();
-      }
+      });
     },
+
+    // ----- рефералы -----
     /** Записывает приглашение, только если приглашённый — совершенно новый игрок, а пригласивший существует. */
     async recordReferral(invitee, referrer) {
+      if (getLevel() < 3) return false;
       const r = await pool.query(
         `INSERT INTO iron_referrals (invitee, referrer)
          SELECT $1::bigint, $2::bigint
@@ -60,21 +85,119 @@ export function createPgStore(pool, { createState, summarize, qualifyLevel = 3 }
       return r.rowCount > 0;
     },
     async referralOf(invitee) {
+      if (getLevel() < 3) return null;
       const r = await pool.query('SELECT referrer FROM iron_referrals WHERE invitee = $1', [invitee]);
       return r.rows[0] ? String(r.rows[0].referrer) : null;
     },
     async referralStats(referrer) {
+      if (getLevel() < 3) return { invited: 0, qualified: 0 };
       const r = await pool.query('SELECT COUNT(*)::int AS invited, COUNT(*) FILTER (WHERE qualified)::int AS qualified FROM iron_referrals WHERE referrer = $1', [referrer]);
       return r.rows[0] || { invited: 0, qualified: 0 };
     },
-    /** Игроки (реальные Telegram-аккаунты), у которых наступил срок завершения таймера и включены уведомления. */
+    /** Игроки (реальные Telegram-аккаунты), у которых наступил срок события и включены уведомления. */
     async dueForNotify(now, limit = 40) {
+      if (getLevel() < 3) return [];
       const r = await pool.query(
         'SELECT telegram_id FROM iron_players WHERE notify_enabled AND next_event_at IS NOT NULL AND next_event_at <= $1 AND telegram_id > 0 ORDER BY next_event_at LIMIT $2',
         [now, limit],
       );
       return r.rows.map((x) => String(x.telegram_id));
     },
+
+    // ----- дуэли -----
+    async pvpCandidates(userId, rating, window, limit = 4) {
+      if (getLevel() < 4) return [];
+      const r = await pool.query(
+        `SELECT telegram_id, nickname, level, rating, state->'pvp'->'defense' AS defense FROM iron_players
+         WHERE telegram_id > 0 AND telegram_id <> $1 AND has_defense AND rating BETWEEN $2 AND $3
+         ORDER BY random() LIMIT $4`,
+        [userId, rating - window, rating + window, limit],
+      );
+      return r.rows.map((x) => ({ id: String(x.telegram_id), nickname: x.nickname, level: x.level, rating: x.rating, defense: x.defense || [] }));
+    },
+    async pvpOpponent(id) {
+      if (getLevel() < 4) return null;
+      const r = await pool.query(
+        `SELECT telegram_id, nickname, level, rating, state->'pvp'->'defense' AS defense FROM iron_players WHERE telegram_id = $1 AND telegram_id > 0 AND has_defense`, [id]);
+      const x = r.rows[0];
+      return x ? { id: String(x.telegram_id), nickname: x.nickname, level: x.level, rating: x.rating, defense: x.defense || [] } : null;
+    },
+
+    // ----- кланы -----
+    async clanOf(userId) {
+      if (getLevel() < 4) return null;
+      const r = await pool.query('SELECT clan_id FROM iron_clan_members WHERE telegram_id = $1', [userId]);
+      return r.rows[0] ? String(r.rows[0].clan_id) : null;
+    },
+    async clanInfo(clanId, week) {
+      if (getLevel() < 4) return null;
+      const c = await pool.query('SELECT id, name, tag, leader FROM iron_clans WHERE id = $1', [clanId]);
+      if (!c.rows[0]) return null;
+      const m = await pool.query(
+        `SELECT m.telegram_id, p.nickname, p.level, CASE WHEN p.clan_week = $2 THEN p.clan_points ELSE 0 END AS points
+         FROM iron_clan_members m JOIN iron_players p ON p.telegram_id = m.telegram_id
+         WHERE m.clan_id = $1 ORDER BY points DESC, p.level DESC LIMIT 50`,
+        [clanId, week],
+      );
+      const members = m.rows.map((x) => ({ id: String(x.telegram_id), nickname: x.nickname, level: x.level, points: x.points }));
+      return { id: String(c.rows[0].id), name: c.rows[0].name, tag: c.rows[0].tag, leader: String(c.rows[0].leader), members, total: members.reduce((a, b) => a + b.points, 0) };
+    },
+    async clanList(week, query = '', limit = 20) {
+      if (getLevel() < 4) return [];
+      const r = await pool.query(
+        `SELECT c.id, c.name, c.tag, COUNT(m.telegram_id)::int AS members,
+                COALESCE(SUM(CASE WHEN p.clan_week = $1 THEN p.clan_points ELSE 0 END), 0)::int AS points
+         FROM iron_clans c
+         LEFT JOIN iron_clan_members m ON m.clan_id = c.id
+         LEFT JOIN iron_players p ON p.telegram_id = m.telegram_id
+         WHERE ($2::text = '' OR LOWER(c.name) LIKE '%' || LOWER($2::text) || '%' OR UPPER(c.tag) = UPPER($2::text))
+         GROUP BY c.id ORDER BY points DESC, members DESC LIMIT $3`,
+        [week, query, limit],
+      );
+      return r.rows.map((x) => ({ id: String(x.id), name: x.name, tag: x.tag, members: x.members, points: x.points }));
+    },
+    async clanCreate(userId, name, tag) {
+      if (getLevel() < 4) throw unavailable();
+      try {
+        return await tx(async (client) => {
+          const c = await client.query('INSERT INTO iron_clans (name, tag, leader) VALUES ($1, $2, $3) RETURNING id', [name, tag, userId]);
+          await client.query('INSERT INTO iron_clan_members (telegram_id, clan_id) VALUES ($1, $2)', [userId, c.rows[0].id]);
+          return String(c.rows[0].id);
+        });
+      } catch (error) {
+        if (dup(error)) throw new GameError('clan_conflict', 'Название или тег клана уже заняты, либо вы уже состоите в клане.', 409);
+        throw error;
+      }
+    },
+    async clanJoin(userId, clanId, maxMembers) {
+      if (getLevel() < 4) throw unavailable();
+      try {
+        return await tx(async (client) => {
+          const c = await client.query('SELECT id FROM iron_clans WHERE id = $1 FOR UPDATE', [clanId]);
+          if (!c.rows[0]) throw new GameError('not_found', 'Клан не найден.', 404);
+          const n = await client.query('SELECT COUNT(*)::int AS n FROM iron_clan_members WHERE clan_id = $1', [clanId]);
+          if (n.rows[0].n >= maxMembers) throw new GameError('clan_full', 'В клане нет свободных мест.', 409);
+          await client.query('INSERT INTO iron_clan_members (telegram_id, clan_id) VALUES ($1, $2)', [userId, clanId]);
+          return true;
+        });
+      } catch (error) {
+        if (dup(error)) throw new GameError('already_member', 'Вы уже состоите в клане.', 409);
+        throw error;
+      }
+    },
+    async clanLeave(userId) {
+      if (getLevel() < 4) throw unavailable();
+      return tx(async (client) => {
+        const m = await client.query('DELETE FROM iron_clan_members WHERE telegram_id = $1 RETURNING clan_id', [userId]);
+        if (!m.rows[0]) throw new GameError('not_member', 'Вы не состоите в клане.', 409);
+        const clanId = m.rows[0].clan_id;
+        const left = await client.query('SELECT telegram_id FROM iron_clan_members WHERE clan_id = $1 ORDER BY joined_at, telegram_id LIMIT 1', [clanId]);
+        if (!left.rows[0]) await client.query('DELETE FROM iron_clans WHERE id = $1', [clanId]);
+        else await client.query('UPDATE iron_clans SET leader = $2 WHERE id = $1 AND leader = $3', [clanId, left.rows[0].telegram_id, userId]);
+        return true;
+      });
+    },
+
     async leaderboard(limit = 20) {
       const r = await pool.query('SELECT nickname, level, xp, wins FROM iron_players ORDER BY xp DESC, wins DESC, telegram_id ASC LIMIT $1', [limit]);
       return r.rows.map((row) => ({ nickname: row.nickname, level: row.level, xp: Number(row.xp), wins: row.wins }));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CrewPanel } from '../components/Crew';
 import { Icon } from '../components/Icon';
 import { TankArt } from '../components/TankArt';
 import { Bar, Btn, ClassBadge, CostList, Empty, Modal, Panel, StatRow, TimerBar } from '../components/ui';
@@ -36,7 +37,7 @@ export function HangarScreen() {
     <div className="screen hangar-grid">
       <Panel id="tank-detail" className="selected" title={cur.c.name} icon="hangar" right={<span className="muted small">Парк {view.base.garage.used}/{view.base.garage.capacity}</span>}>
         <div className={`showcase ${rarityClass(cur.c.rarity)}`}>
-          <TankArt cls={cur.c.class} shape={cur.c.shape} rarity={cur.c.rarity} size={300} idle />
+          <TankArt cls={cur.c.class} shape={cur.c.shape} rarity={cur.c.rarity} size={300} idle camoId={cur.v.cosmetic && cur.v.cosmetic.camo !== 'default' ? cur.v.cosmetic.camo : undefined} emblemId={cur.v.cosmetic && cur.v.cosmetic.emblem !== 'none' ? cur.v.cosmetic.emblem : undefined} />
         </div>
         <div className="tags"><ClassBadge cls={cur.c.class} /><span className={`chip ${rarityClass(cur.c.rarity)}`}>{cur.c.rarity}</span><span className="chip">{cur.c.country}</span><span className="chip">Ур. техники {cur.c.tier}</span></div>
         <p className="muted">{cur.c.desc}</p>
@@ -47,6 +48,8 @@ export function HangarScreen() {
         <p className="muted small hist">{cur.c.history}</p>
       </Panel>
 
+      {cur.v.owned && <CrewPanel cfg={cur.c} v={cur.v} />}
+
       <Panel className="collection" title="Коллекция" icon="star" right={<span className="muted small">{view.tanks.filter((t) => t.owned).length}/{config.tanks.length}</span>}>
         <div className="filters" role="tablist">{FILTERS.map(([k, n]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{n}</button>)}</div>
         {view.produceQueue.length > 0 && <div className="queue-box">{view.produceQueue.map((q) => <div key={q.id}><span className="small">Производство: {config.tanks.find((t) => t.id === q.tankId)?.name}</span><TimerBar startedAt={q.startedAt} endsAt={q.endsAt} /></div>)}</div>}
@@ -55,7 +58,7 @@ export function HangarScreen() {
             {shown.map(({ c, v }) => (
               <li key={c.id}>
                 <button className={`tcard ${sel === c.id ? 'on' : ''} ${rarityClass(c.rarity)} ${v.owned ? '' : 'unowned'}`} onClick={() => { setSel(c.id); focusPanel('tank-detail'); }}>
-                  <TankArt cls={c.class} shape={c.shape} size={112} />
+                  <TankArt cls={c.class} shape={c.shape} size={112} camoId={v.cosmetic && v.cosmetic.camo !== 'default' ? v.cosmetic.camo : undefined} emblemId={v.cosmetic && v.cosmetic.emblem !== 'none' ? v.cosmetic.emblem : undefined} />
                   <span className="tc-name">{c.name}</span>
                   <span className="tc-meta"><ClassBadge cls={c.class} />{v.owned ? <b>Ур. {v.level}</b> : v.producing ? <b className="amber">Строится</b> : v.problem ? <Icon name="lock" size={13} /> : <b className="olive">Доступен</b>}{view.squad.includes(c.id) && <Icon name="flag" size={13} className="in-squad" />}</span>
                 </button>

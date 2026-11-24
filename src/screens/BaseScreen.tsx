@@ -46,7 +46,7 @@ export function BaseScreen() {
           <div>
             <p className="eyebrow">Военная база</p>
             <h2>База «{view.nickname}»</h2>
-            <p className="muted">Уровень базы {view.base.level} · командир {view.commander.level} ур.</p>
+            <p className="muted">Уровень базы {view.base.level} · {view.commander.rank}, {view.commander.level} ур.</p>
             <button className="event-pill" onClick={() => go('quests')}><Icon name="flag" size={13} />{view.weekly.event.name} ×{view.weekly.event.mul}</button>
           </div>
           <div className="power" title="Электроэнергия: при дефиците замедляется производство">

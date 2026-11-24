@@ -5,6 +5,18 @@ const PALETTES = [
   ['#557066', '#3f5249', '#2a362f'], ['#76624f', '#564639', '#392f28'], ['#656b49', '#4a4e35', '#33351f'], ['#6d767c', '#4e565b', '#363c3f'],
 ];
 const ENEMY = ['#8a5650', '#5f3b36', '#3a2724'];
+/** Косметические камуфляжи: меняют краску и узор, на силу не влияют. */
+const CAMO_STYLE: Record<string, { pal: string[]; kind: number }> = {
+  desert: { pal: ['#b79c63', '#8f7a4b', '#5e4f30'], kind: 1 }, forest: { pal: ['#4f6b3a', '#38502b', '#233619'], kind: 1 },
+  arctic: { pal: ['#cfd6d9', '#a5aeb3', '#7b858a'], kind: 2 }, night: { pal: ['#2f3a52', '#1f283b', '#121824'], kind: 3 }, gold: { pal: ['#e8bd52', '#b88a2a', '#7a5a18'], kind: 0 },
+};
+const EMBLEM_PATH: Record<string, string> = {
+  star: 'M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z',
+  skull: 'M12 3a8 8 0 00-5 14v3h10v-3A8 8 0 0012 3zM9 10a1.8 1.8 0 100 3.6A1.8 1.8 0 009 10zm6 0a1.8 1.8 0 100 3.6 1.8 1.8 0 000-3.6z',
+  wolf: 'M3 3l5 4h8l5-4-1 9-4 3v5l-4-2-4 2v-5l-4-3z', eagle: 'M12 4l3 4 7-3-3 7-4 1 2 6-5-3-5 3 2-6-4-1-3-7 7 3z',
+  dragon: 'M4 18c4-1 6-5 6-9l4 2 6-6c0 6-3 11-8 13l-3 4z', crown: 'M3 18l-1-11 6 5 4-8 4 8 6-5-1 11z',
+};
+const EMBLEM_POS: Record<TankClass, [number, number, number]> = { light: [104, 56, 0.42], medium: [101, 49, 0.5], heavy: [100, 40, 0.58], td: [104, 62, 0.5], arty: [106, 60, 0.46] };
 const RARITY_GLOW: Record<string, string> = { Обычная: '#8a959b', Редкая: '#4f93c9', Эпическая: '#a370d6', Легендарная: '#e0932a' };
 
 interface Props {
@@ -15,18 +27,21 @@ interface Props {
   fire?: number;
   /** Лёгкое «дыхание» техники для витрины. */
   idle?: boolean;
+  /** Косметика: камуфляж и эмблема (не влияют на параметры). */
+  camoId?: string; emblemId?: string;
 }
 
 interface Part { g: string; c2: string; c3: string; v: number; camo: number; fire: number }
 
 /** Векторная карточка танка. Силуэт зависит от класса; оттенок, камуфляж и детали — от модели. */
-export function TankArt({ cls, shape, rarity, size = 160, enemy = false, dead = false, className, hpRatio = 1, fire = 0, idle = false }: Props) {
+export function TankArt({ cls, shape, rarity, size = 160, enemy = false, dead = false, className, hpRatio = 1, fire = 0, idle = false, camoId, emblemId }: Props) {
   const idx = shape < 0 ? 2 : shape;
-  const [c1, c2, c3] = enemy ? ENEMY : PALETTES[idx % PALETTES.length];
+  const skin = !enemy && camoId ? CAMO_STYLE[camoId] : undefined;
+  const [c1, c2, c3] = enemy ? ENEMY : skin ? skin.pal : PALETTES[idx % PALETTES.length];
   const v = idx % 3;
-  const camo = idx % 4;
+  const camo = skin ? skin.kind : idx % 4;
   const glow = rarity ? RARITY_GLOW[rarity] : 'transparent';
-  const gid = `g${idx}${cls}${enemy ? 'e' : ''}`;
+  const gid = `g${idx}${cls}${enemy ? 'e' : ''}${camoId ?? ''}`;
   const p: Part = { g: gid, c2, c3, v, camo, fire };
   return (
     <svg className={`tank-art ${className ?? ''}`} width={size} height={size * 0.56} viewBox="0 0 200 112" role="img" aria-label="Танк"
@@ -44,6 +59,11 @@ export function TankArt({ cls, shape, rarity, size = 160, enemy = false, dead = 
           {cls === 'heavy' && <Heavy {...p} />}
           {cls === 'td' && <Td {...p} />}
           {cls === 'arty' && <Arty {...p} />}
+          {emblemId && EMBLEM_PATH[emblemId] && (
+            <g transform={`translate(${EMBLEM_POS[cls][0]} ${EMBLEM_POS[cls][1]}) scale(${EMBLEM_POS[cls][2]}) translate(-12 -12)`} opacity="0.92">
+              <path d={EMBLEM_PATH[emblemId]} fill="#f2e8c8" stroke="#1b1708" strokeWidth="1.2" strokeLinejoin="round" />
+            </g>
+          )}
         </g>
         {(hpRatio < 0.45 || dead) && <Smoke heavy={hpRatio < 0.2 || dead} />}
       </g>

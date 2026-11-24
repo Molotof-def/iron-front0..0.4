@@ -49,12 +49,12 @@ function Shell() {
           ))}
         </nav>
         <button className="nav-item help-btn" onClick={() => setHelp(true)}><Icon name="info" size={19} /><span>Справка</span></button>
-        <div className="side-foot"><span>{view.nickname}</span><small>Уровень командира {view.commander.level}</small></div>
+        <div className="side-foot"><span>{view.nickname}</span><small>{view.commander.rank} · ур. {view.commander.level}</small></div>
       </aside>
 
       <div className="main">
         <header className="topbar">
-          <div className="topbar-id"><span className="lvl-badge">{view.commander.level}</span><b>{view.nickname}</b><span className="xp-mini" aria-hidden="true"><i style={{ width: `${Math.max(2, Math.min(100, ((view.commander.xp - view.commander.xpBase) / Math.max(1, view.commander.xpNext - view.commander.xpBase)) * 100))}%` }} /></span><button className="help-top" aria-label="Справка" onClick={() => setHelp(true)}><Icon name="info" size={18} /></button></div>
+          <div className="topbar-id"><span className="lvl-badge">{view.commander.level}</span><b>{view.nickname}</b><small className="rank">{view.commander.rank}</small><span className="xp-mini" aria-hidden="true"><i style={{ width: `${Math.max(2, Math.min(100, ((view.commander.xp - view.commander.xpBase) / Math.max(1, view.commander.xpNext - view.commander.xpBase)) * 100))}%` }} /></span><button className="help-top" aria-label="Справка" onClick={() => setHelp(true)}><Icon name="info" size={18} /></button></div>
           <ul className="resbar" aria-label="Ресурсы">
             {RES_ORDER.map((k) => (
               <li key={k} title={RES_LABEL[k]} onClick={() => setHelp(true)}>

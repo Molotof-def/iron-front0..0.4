@@ -85,18 +85,3 @@ export function ReferralPanel() {
     </Panel>
   );
 }
-
-/** Включение и выключение уведомлений бота. */
-export function NotifyPanel() {
-  const { view, act, busy } = useGame();
-  return (
-    <Panel title="Уведомления бота" icon="bell">
-      <div className="toggle-row">
-        <div><b>Сообщения о готовности</b><p className="muted small">Бот напишет в Telegram, когда достроится здание, выпустится танк или завершится исследование.</p></div>
-        <button className={`switch ${view.notify ? 'on' : ''}`} role="switch" aria-checked={view.notify} disabled={busy}
-          onClick={() => act('profile/notify', { enabled: !view.notify }, view.notify ? 'Уведомления выключены' : 'Уведомления включены')}><i /></button>
-      </div>
-      <p className="muted small">Чтобы сообщения приходили, нажмите /start в чате с ботом и не блокируйте его.</p>
-    </Panel>
-  );
-}

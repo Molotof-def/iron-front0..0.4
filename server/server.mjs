@@ -31,7 +31,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
 // Ускорение таймеров только для локальной проверки; в production всегда 1.
 const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
-const VERSION = '2.2.1';
+const VERSION = '2.3.0';
 const MAX_BODY = 256 * 1024;
 // pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
 const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;
@@ -86,11 +86,12 @@ function authenticatedUser(req) {
   return devUser(req.headers['x-dev-user'], { production: IS_PROD, allow: ALLOW_DEV_AUTH });
 }
 let migrating = null;
+let schemaLevel = 0; // достигнутый уровень схемы БД; от него зависят дополнительные функции
 async function ensureDatabase() {
   if (!pool) return false;
   if (dbReady) return true;
   migrating ??= runMigrations(pool).finally(() => { migrating = null; });
-  await migrating;
+  schemaLevel = await migrating;
   dbReady = true;
   dbError = '';
   return true;
@@ -175,7 +176,7 @@ async function startBot() {
 const storeDeps = { createState, summarize, qualifyLevel: 3 };
 let gameStore = null;
 if (pool) {
-  const pgStore = createPgStore(pool, storeDeps);
+  const pgStore = createPgStore(pool, { ...storeDeps, getLevel: () => schemaLevel });
   gameStore = withEnsure(pgStore, ensureDatabase);
 } else if (!IS_PROD) {
   gameStore = createFileStore(resolve(root, 'data', 'dev-store.json'), storeDeps);

@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { useGame } from '../state/GameProvider';
 import { RES_LABEL, costEntries, duration, num, pct } from '../lib/format';
 import { haptic } from '../lib/telegram';
+import { sfx } from '../lib/settings';
 import type { Cost, ResourceKey, TankClass } from '../types';
 
 export function Panel({ title, icon, right, children, className = '', id }: { title?: ReactNode; icon?: string; right?: ReactNode; children: ReactNode; className?: string; id?: string }) {
@@ -26,7 +27,7 @@ export function Btn({ variant = 'primary', block, icon, className = '', children
     <button
       {...rest}
       className={`btn btn-${variant} ${block ? 'btn-block' : ''} ${className}`}
-      onClick={(e) => { haptic('tap'); onClick?.(e); }}
+      onClick={(e) => { haptic('tap'); sfx('tap'); onClick?.(e); }}
     >
       {icon && <Icon name={icon} size={16} />}{children}
     </button>
