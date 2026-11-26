@@ -3,7 +3,7 @@
 // и расширены классами техники, погодой, аренами и отрядами.
 import { ARENAS, CLASSES, LEVEL_GROWTH, WEATHER } from './data.mjs';
 
-export const ACTIONS = ['attack', 'guard', 'aim', 'repair', 'overdrive'];
+export const ACTIONS = ['attack', 'guard', 'aim', 'repair', 'overdrive', 'kit', 'smoke', 'boost'];
 export const MAX_ENERGY = 3;
 const LOG_LIMIT = 40;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -53,9 +53,9 @@ export function makeEnemyUnit(def, level, role, mission) {
   return unitFrom(def, s, role);
 }
 
-export function createBattle({ id, mission, squad, enemies, now, freeRepairs, repairPct, title, pvp }) {
+export function createBattle({ id, mission, squad, enemies, now, freeRepairs, repairPct, title, pvp, raid }) {
   return {
-    id, missionId: mission.id, title: title || mission.name, pvp: pvp || null, startedAt: now, turn: 0, status: 'active',
+    id, missionId: mission.id, title: title || mission.name, pvp: pvp || null, raid: raid || null, startedAt: now, turn: 0, status: 'active',
     squad, active: 0, enemies, foe: 0,
     turnLimit: mission.turnLimit || 0, arena: mission.arena, weather: mission.weather,
     freeRepairs, repairPct, lost: 0, log: [`Операция «${mission.name}» началась. ${ARENAS[mission.arena].name}, ${WEATHER[mission.weather].name.toLowerCase()}.`],
@@ -63,6 +63,7 @@ export function createBattle({ id, mission, squad, enemies, now, freeRepairs, re
   };
 }
 
+export const pushLog = (b, msg) => say(b, msg);
 const say = (b, msg) => { b.log.push(msg); if (b.log.length > LOG_LIMIT) b.log.splice(0, b.log.length - LOG_LIMIT); };
 const evasionOf = (unit, weather) => clamp((unit.mobility - 28) * 0.008 + (CLASSES[unit.cls].evasion || 0) + (unit.evadeBonus || 0) + WEATHER[weather].evade, 0, 0.3);
 const frontPlayer = (b) => b.squad[b.active];
@@ -129,6 +130,24 @@ function resolvePlayer(b, action, rng) {
     say(b, `Ремонтная бригада восстанавливает ${restored} прочности${free ? ' (бесплатный ремонт)' : ''}.`);
     return { ok: true };
   }
+  if (action === 'kit') {
+    if (p.hp >= p.maxHp) return { ok: false, message: 'Ремкомплект не нужен: корпус цел.' };
+    const restored = Math.min(Math.round(p.maxHp * 0.4), p.maxHp - p.hp);
+    p.hp += restored;
+    say(b, `Ремкомплект: ${p.name} восстанавливает ${restored} прочности.`);
+    return { ok: true };
+  }
+  if (action === 'smoke') {
+    p.smoke = true;
+    say(b, `${p.name} ставит дымовую завесу: следующая атака врага не попадёт.`);
+    return { ok: true };
+  }
+  if (action === 'boost') {
+    if (p.energy >= MAX_ENERGY) return { ok: false, message: 'Энергия уже полная.' };
+    p.energy = MAX_ENERGY;
+    say(b, `Форсаж: ${p.name} восстанавливает энергию до максимума.`);
+    return { ok: true };
+  }
   return { ok: false, message: 'Команда не распознана.' };
 }
 
@@ -137,6 +156,11 @@ function resolveEnemy(b, rng) {
   const p = frontPlayer(b); const e = frontEnemy(b); const w = WEATHER[b.weather];
   const r = rng(); const role = e.role || 'assault';
   e.acted += 1;
+  if (p.smoke) {
+    p.smoke = false; e.energy = Math.min(MAX_ENERGY, e.energy + 1);
+    say(b, `${e.name} стреляет вслепую — дым скрыл цель.`);
+    return;
+  }
 
   if (rng() < evasionOf(p, b.weather)) {
     e.energy = Math.min(MAX_ENERGY, e.energy + 1);

@@ -92,6 +92,34 @@ export function createFileStore(path, { createState, summarize, qualifyLevel = 3
       persist(); return true;
     },
 
+    async clanWar(clanId, prevWeek) {
+      const totals = Object.keys(data.clans).map((id) => ({ id, pts: Object.keys(data.members).filter((u) => data.members[u] === id && data.players[u]).reduce((a, u) => a + (sumOf(u).clanPrevWeek === prevWeek ? sumOf(u).clanPrevPoints : 0), 0) }));
+      const mine = totals.find((t) => t.id === clanId);
+      return mine ? { rank: 1 + totals.filter((t) => t.pts > mine.pts).length, pts: mine.pts, clans: totals.length } : null;
+    },
+    async top(kind, limit = 100) {
+      const rows = Object.entries(data.players).filter(([id]) => Number(id) > 0).map(([, r]) => ({ s: summarize(r.state), st: r.state }));
+      const value = (x) => (kind === 'pvp' ? x.s.rating : kind === 'raid' ? x.s.raidBest : x.s.xp);
+      return rows.filter((x) => (kind === 'pvp' ? (x.st.pvp?.played ?? 0) > 0 : kind === 'raid' ? x.s.raidBest > 0 : true))
+        .sort((a, b) => value(b) - value(a)).slice(0, limit).map((x) => ({ nickname: x.s.nickname, level: x.s.level, value: value(x) }));
+    },
+    async topRank(kind, value) {
+      const rows = Object.entries(data.players).filter(([id]) => Number(id) > 0).map(([, r]) => ({ s: summarize(r.state), st: r.state }));
+      const v = (x) => (kind === 'pvp' ? x.s.rating : kind === 'raid' ? x.s.raidBest : x.s.xp);
+      return 1 + rows.filter((x) => (kind === 'pvp' ? (x.st.pvp?.played ?? 0) > 0 : true) && v(x) > value).length;
+    },
+    async adminStats() {
+      const all = Object.entries(data.players).filter(([id]) => Number(id) > 0).map(([, r]) => r.state);
+      const now = Date.now(); const DAY = 86_400_000;
+      const created = (s) => s.createdAt; const seen = (s) => s.lastTick;
+      return { schemaLevel: 99, players: {
+        total: all.length, new_day: all.filter((s) => now - created(s) < DAY).length, new_week: all.filter((s) => now - created(s) < 7 * DAY).length,
+        active_day: all.filter((s) => now - seen(s) < DAY).length, active_week: all.filter((s) => now - seen(s) < 7 * DAY).length,
+        fought: all.filter((s) => s.stats.battles > 0).length, tutorial_done: all.filter((s) => s.tutorial?.done).length,
+        d1_eligible: all.filter((s) => now - created(s) > DAY).length, d1_returned: all.filter((s) => now - created(s) > DAY && seen(s) >= created(s) + DAY).length,
+        d7_eligible: all.filter((s) => now - created(s) > 7 * DAY).length, d7_returned: all.filter((s) => now - created(s) > 7 * DAY && seen(s) >= created(s) + 7 * DAY).length,
+      }, levels: [], clans: Object.keys(data.clans).length, clan_members: Object.keys(data.members).length, referrals: Object.keys(data.referrals).length };
+    },
     async leaderboard(limit = 20) {
       return Object.values(data.players).map((r) => summarize(r.state))
         .sort((a, b) => b.xp - a.xp || b.wins - a.wins).slice(0, limit)

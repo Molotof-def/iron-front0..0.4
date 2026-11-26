@@ -31,7 +31,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOW_DEV_AUTH = process.env.ALLOW_DEV_AUTH !== 'false';
 // Ускорение таймеров только для локальной проверки; в production всегда 1.
 const TIME_SCALE = IS_PROD ? 1 : Math.min(600, Math.max(1, Number(process.env.GAME_TIME_SCALE) || 1));
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 const MAX_BODY = 256 * 1024;
 // pg подключается только при наличии DATABASE_URL, поэтому локальная разработка работает и без базы.
 const Pool = DATABASE_URL ? (await import('pg')).default.Pool : null;
@@ -182,7 +182,10 @@ if (pool) {
   gameStore = createFileStore(resolve(root, 'data', 'dev-store.json'), storeDeps);
   console.log('[game] DATABASE_URL не задан — используется локальный файл data/dev-store.json (только для разработки).');
 }
+const recentErrors = [];
+const noteError = (msg) => { recentErrors.unshift({ t: new Date().toISOString(), msg: String(msg).slice(0, 300) }); recentErrors.length = Math.min(recentErrors.length, 20); };
 const gameApi = createGameApi({
+  adminToken: process.env.ADMIN_TOKEN || '', getErrors: () => recentErrors,
   store: gameStore, authenticate: authenticatedUser, botUsername: () => botUsername || null, limiter: createRateLimiter({ windowMs: 10_000, max: 60 }), timeScale: TIME_SCALE,
 });
 
@@ -266,6 +269,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { error: 'not_found' });
   } catch (error) {
     console.error('[api]', error);
+    if (!error.status || error.status >= 500) noteError(`${req.method} ${url?.pathname ?? ''}: ${String(error?.message || error)}`);
     if (!error.status || error.status >= 500) console.error(`[server] ${req.method} ${url?.pathname ?? ''}:`, String(error?.stack || error).split('\n').slice(0, 4).join(' | ').slice(0, 600));
     return send(res, error.status || 500, { error: error.status === 400 ? 'invalid_request' : 'internal_error', message: error.status ? error.message : 'Внутренняя ошибка сервера.' });
   }

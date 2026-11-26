@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { CampaignBoard } from '../components/Campaign';
 import { DuelBoard } from '../components/Duels';
+import { RaidBoard } from '../components/Raid';
 import { Icon } from '../components/Icon';
 import { ShareCard } from '../components/ShareCard';
 import { Tabs } from '../components/Tabs';
@@ -10,7 +12,7 @@ import { RES_LABEL, costEntries, num } from '../lib/format';
 import { sfx } from '../lib/settings';
 import type { BattleUnit, MissionType, MissionView, TankView } from '../types';
 
-const TYPE_ICON: Record<MissionType, string> = { recon: 'radar', defense: 'shield', capture: 'flag', trial: 'star', boss: 'trophy' };
+const TYPE_ICON: Record<MissionType, string> = { recon: 'radar', defense: 'shield', capture: 'flag', trial: 'star', boss: 'trophy', campaign: 'flag' };
 const ACTIONS: { id: string; name: string; icon: string; cost: string; hint: string }[] = [
   { id: 'attack', name: 'Атака', icon: 'attack', cost: '1', hint: 'Выстрел по врагу' },
   { id: 'overdrive', name: 'Залп', icon: 'power', cost: '3', hint: 'Мощный удар' },
@@ -21,12 +23,15 @@ const ACTIONS: { id: string; name: string; icon: string; cost: string; hint: str
 
 export function BattleScreen() {
   const { view } = useGame();
-  const [tab, setTab] = useState<'ops' | 'duel'>('ops');
+  const [tab, setTab] = useState<'ops' | 'story' | 'raid' | 'duel'>('ops');
   if (view.battle) return <BattleArena />;
   return (
     <div className="screen">
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'ops' as const, label: 'Операции', icon: 'battle' }, { id: 'duel' as const, label: 'Дуэли', icon: 'trophy', badge: view.pvp.prev && !view.pvp.prev.claimed ? '!' : null }]} />
-      {tab === 'ops' ? <MissionBoard /> : <DuelBoard />}
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'ops' as const, label: 'Операции', icon: 'battle' }, { id: 'story' as const, label: 'Кампания', icon: 'flag' }, { id: 'raid' as const, label: 'Рейд', icon: 'radar' }, { id: 'duel' as const, label: 'Дуэли', icon: 'trophy', badge: view.pvp.prev && !view.pvp.prev.claimed ? '!' : null }]} />
+      {tab === 'ops' && <MissionBoard />}
+      {tab === 'story' && <CampaignBoard />}
+      {tab === 'raid' && <RaidBoard />}
+      {tab === 'duel' && <DuelBoard />}
     </div>
   );
 }
@@ -44,15 +49,16 @@ function rulesProblem(m: MissionView, picked: string[], tanks: TankView[], cfgCl
 
 function MissionBoard() {
   const { view, config, act, busy } = useGame();
-  const [selId, setSelId] = useState<string>(() => view.missions.find((m) => !m.locked)?.id ?? 'r1');
+  const ops = view.missions.filter((m) => m.type !== 'campaign');
+  const [selId, setSelId] = useState<string>(() => ops.find((m) => !m.locked)?.id ?? 'r1');
   const [picked, setPicked] = useState<string[]>(view.squad);
   const [filter, setFilter] = useState<MissionType | 'all'>('all');
-  const m = view.missions.find((x) => x.id === selId) as MissionView;
+  const m = ops.find((x) => x.id === selId) as MissionView;
   const cls = (id: string) => config.tanks.find((t) => t.id === id)!.class;
   const problem = m.locked ? m.problem?.message ?? null : rulesProblem(m, picked, view.tanks, cls, view.base.squadLimit) ?? (view.resources.fuel < m.fuel ? `Не хватает топлива: нужно ${m.fuel}.` : null);
   const owned = view.tanks.filter((t) => t.owned);
-  const list = view.missions.filter((x) => filter === 'all' || x.type === filter);
-  const open = view.missions.filter((x) => !x.locked);
+  const list = ops.filter((x) => filter === 'all' || x.type === filter);
+  const open = ops.filter((x) => !x.locked);
   const recommended = (open.find((x) => x.clears === 0) ?? open[open.length - 1])?.id;
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const limit = Math.min(view.base.squadLimit, m.rules?.maxSquad ?? 99);
@@ -201,7 +207,7 @@ function BattleArena() {
   return (
     <div className="screen arena-grid">
       <Panel title={mission?.name ?? b.title ?? 'Бой'} icon="battle" className="arena-head"
-        right={<span className="chip">Ход {b.turn}{b.turnLimit ? `/${b.turnLimit}` : ''} · {config.weather[b.weather].name}</span>}>
+        right={<span className="chip">{b.raid ? `Волна ${b.raid.wave} · ` : ''}Ход {b.turn}{b.turnLimit ? `/${b.turnLimit}` : ''} · {config.weather[b.weather].name}</span>}>
         <div className="arena">
           <UnitCard u={me} id={`a${b.active}`} fire={fire.ally} />
           <div className="vs"><span>VS</span><small>Врагов: {alive}</small></div>
@@ -226,6 +232,13 @@ function BattleArena() {
                 );
               })}
             </div>
+            <div className="items-bar">
+              {config.items.map((it) => {
+                const n = view.items[it.id] ?? 0;
+                const why = n < 1 ? 'Нет в запасе' : it.id === 'kit' && me.hp >= me.maxHp ? 'Корпус цел' : it.id === 'boost' && me.energy >= 3 ? 'Энергия полная' : null;
+                return <button key={it.id} className="item-btn" disabled={busy || Boolean(why)} title={why ?? it.desc} onClick={() => act('battle/action', { battleId: b.id, action: it.id })}><b>{it.name}</b><small>{n} шт.</small></button>;
+              })}
+            </div>
             <details className="howto" open={b.turn < 2}>
               <summary>Как играть в бою</summary>
               <ul>
@@ -234,6 +247,7 @@ function BattleArena() {
                 <li><b>Прицел</b> — следующий выстрел сильнее.</li>
                 <li><b>Защита</b> — смягчает удар и даёт +1 энергию.</li>
                 <li><b>Ремонт</b> — лечит; бесплатных ремонтов: {b.freeRepairs}.</li>
+                <li><b>Расходники</b> — ремкомплект, дым, форсаж: действуют сразу и берут ваш ход.</li>
               </ul>
               <p className="muted small">Энергия восстанавливается на 1 каждый ход. Следите за прочностью: когда она мала, используйте ремонт.</p>
             </details>
@@ -272,6 +286,7 @@ function Result() {
       )}
       {r?.bonus && <p className="ok-note"><Icon name="check" size={14} /> Бонусное условие выполнено: +20%</p>}
       {r?.firstClear && <p className="ok-note"><Icon name="star" size={14} /> Первая победа: +50% кредитов и опыта</p>}
+      {r?.waves !== undefined && <p className="ok-note"><Icon name="flag" size={14} /> Пройдено волн: {r.waves}</p>}
       {r?.rating ? <p className={r.rating > 0 ? 'ok-note' : 'problem'}><Icon name="trophy" size={14} /> Рейтинг дуэлей: {r.rating > 0 ? '+' : ''}{r.rating}</p> : null}
       {r?.event && <p className="ok-note"><Icon name="flag" size={14} /> Бонус события недели применён</p>}
       <Btn variant="amber" block icon="trophy" disabled={busy} onClick={() => act('battle/claim', { battleId: b.id }, 'Награда получена')}>Забрать награду</Btn>

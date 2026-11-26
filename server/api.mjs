@@ -2,16 +2,16 @@
 import * as D from './game/data.mjs';
 import * as E from './game/engine.mjs';
 import { buildConfig, buildView } from './game/view.mjs';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
-const AUDITED = new Set(['pvp/start', 'pvp/season-claim', 'pvp/defense', 'pass/claim', 'clan/claim', 'tank/skill', 'tank/respec', 'cosmetic/equip', 'referral/claim', 'weekly/claim', 'profile/notify', 'build/start', 'build/cancel', 'tank/produce', 'tank/produce-cancel', 'tank/upgrade', 'research/start',
+const AUDITED = new Set(['raid/start', 'campaign/claim', 'clan/war-claim', 'tank/module', 'item/craft', 'pvp/start', 'pvp/season-claim', 'pvp/defense', 'pass/claim', 'clan/claim', 'tank/skill', 'tank/respec', 'cosmetic/equip', 'referral/claim', 'weekly/claim', 'profile/notify', 'build/start', 'build/cancel', 'tank/produce', 'tank/produce-cancel', 'tank/upgrade', 'research/start',
   'research/cancel', 'battle/start', 'battle/claim', 'quest/claim', 'achievement/claim', 'profile/nickname']);
 
 export function summarize(state) {
-  return { nickname: state.nickname, xp: state.xp, level: E.commanderLevel(state), wins: state.stats.wins, nextEventAt: E.nextEventAt(state), notifyEnabled: Boolean(state.notify?.enabled), rating: state.pvp?.rating ?? 1000, hasDefense: (state.pvp?.defense?.length ?? 0) > 0, clanPoints: state.clan?.points ?? 0, clanWeek: state.clan?.week ?? -1 };
+  return { nickname: state.nickname, xp: state.xp, level: E.commanderLevel(state), wins: state.stats.wins, nextEventAt: E.nextEventAt(state), notifyEnabled: Boolean(state.notify?.enabled), rating: state.pvp?.rating ?? 1000, hasDefense: (state.pvp?.defense?.length ?? 0) > 0, clanPoints: state.clan?.points ?? 0, clanWeek: state.clan?.week ?? -1, clanPrevPoints: state.clan?.prevPoints ?? 0, clanPrevWeek: state.clan?.prevWeek ?? -1, raidBest: state.raid?.best ?? 0 };
 }
 
-export function createGameApi({ store, authenticate, limiter, timeScale = 1, clock = Date.now, rng = Math.random, log = console, botUsername = () => null }) {
+export function createGameApi({ store, authenticate, limiter, timeScale = 1, clock = Date.now, rng = Math.random, log = console, botUsername = () => null, adminToken = '', getErrors = () => [] }) {
   const config = buildConfig();
   const configJson = JSON.stringify({ ok: true, config });
   const etag = `"${createHash('sha1').update(configJson).digest('hex').slice(0, 16)}"`;
@@ -33,7 +33,16 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
     const id = await store.clanOf(userId);
     const info = id ? await store.clanInfo(id, week) : null;
     const list = info ? [] : await store.clanList(week, query, 20);
+    const prevWeek = week - 1;
+    let war = null;
+    if (info) {
+      const standings = await safe(() => store.clanList(week, '', 100), []);
+      const live = standings.findIndex((c) => c.id === info.id);
+      const prev = await safe(() => store.clanWar(info.id, prevWeek), null);
+      war = { liveRank: live >= 0 ? live + 1 : null, clans: standings.length, prev: prev && { rank: prev.rank, pts: prev.pts, clans: prev.clans, band: D.warBand(prev.rank).name, reward: D.warBand(prev.rank).reward } };
+    }
     const clan = info && {
+      war,
       id: info.id, name: info.name, tag: info.tag, total: info.total, goal: D.clanGoal(info.members.length), maxMembers: D.CLAN.maxMembers,
       members: info.members.map((m) => ({ nickname: m.nickname, level: m.level, points: m.points, leader: m.id === info.leader, me: m.id === userId })),
       weekEndsAt: D.weekEndsAt(now),
@@ -47,8 +56,17 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
   };
 
   /** Возвращает { status, body, headers? } или null, если маршрут не относится к игре. */
+  const sameToken = (a, b) => { const ha = createHash('sha256').update(String(a)).digest(); const hb = createHash('sha256').update(String(b)).digest(); return timingSafeEqual(ha, hb); };
   return async function handle(req, url, readBody) {
     const path = url.pathname;
+    if (path === '/api/admin/stats' && req.method === 'GET') {
+      const given = req.headers['x-admin-token'];
+      if (!adminToken || typeof given !== 'string' || !sameToken(given, adminToken)) return { status: 404, body: { error: 'not_found', message: 'Не найдено.' } };
+      const stats = store ? await store.adminStats().catch((e) => ({ error: String(e.message).slice(0, 160) })) : { error: 'no_store' };
+      const p = stats.players || {};
+      const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+      return { status: 200, body: { ok: true, ...stats, funnel: { total: p.total, tutorial_done: p.tutorial_done, fought: p.fought, fought_pct: pct(p.fought, p.total) }, retention: { d1_pct: pct(p.d1_returned, p.d1_eligible), d7_pct: pct(p.d7_returned, p.d7_eligible) }, recentErrors: getErrors() } };
+    }
     if (!path.startsWith('/api/game/')) return null;
     const route = path.slice('/api/game/'.length);
 
@@ -95,6 +113,13 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
         const q = String(url.searchParams.get('q') || '').replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 20);
         return { status: 200, body: { ok: true, ...(await safe(() => clanView(user.id, q, clock()), { clan: null, list: [], unavailable: true })), minLevel: D.CLAN.minLevel } };
       }
+      if (route === 'top' && req.method === 'GET') {
+        const kind = ['pvp', 'raid', 'xp'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'pvp';
+        const me = await store.transact(user.id, profile, async (state) => ({ result: { value: kind === 'pvp' ? state.pvp.rating : kind === 'raid' ? state.raid.best : state.xp, played: state.pvp.played } }));
+        const rows = await safe(() => store.top(kind, 100), []);
+        const rank = (kind === 'pvp' && me.played === 0) || (kind === 'raid' && me.value === 0) ? null : await safe(() => store.topRank(kind, me.value), null);
+        return { status: 200, body: { ok: true, kind, rows: rows.map((r, i) => ({ rank: i + 1, nickname: r.nickname, level: r.level, value: r.value })), me: { rank, value: me.value } } };
+      }
       if (route === 'leaderboard' && req.method === 'GET') {
         const [top, rank] = await Promise.all([store.leaderboard(20), store.rankOf(user.id)]);
         return { status: 200, body: { ok: true, top, rank } };
@@ -129,9 +154,13 @@ export function createGameApi({ store, authenticate, limiter, timeScale = 1, clo
           const info = await safe(async () => { const id = await store.clanOf(user.id); return id ? store.clanInfo(id, D.weekIndex(clock())) : null; }, null);
           clan = info ? { inClan: true, total: info.total, members: info.members.length } : { inClan: false, total: 0, members: 0 };
         }
+        let clanWar = null;
+        if (action === 'clan/war-claim') {
+          clanWar = await safe(async () => { const id = await store.clanOf(user.id); const r = id ? await store.clanWar(id, D.weekIndex(clock()) - 1) : null; return r ? { inClan: true, rank: r.rank } : { inClan: Boolean(id), rank: null }; }, { inClan: false, rank: null });
+        }
         const view = await store.transact(user.id, profile, async (state) => {
           const now = clock();
-          const next = E.perform(state, action, body, { now, rng, timeScale, requestId: body.requestId, referral: stats, opponent, clan });
+          const next = E.perform(state, action, body, { now, rng, timeScale, requestId: body.requestId, referral: stats, opponent, clan, clanWar });
           const audit = AUDITED.has(action) ? [{ action, payload: auditPayload(action, body) }] : [];
           return { state: next, audit, result: buildView(next, now, { timeScale, referral: stats, referralLink }) };
         });

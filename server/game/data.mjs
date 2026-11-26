@@ -103,6 +103,8 @@ export const TANKS = [
   T('t14', 'Т-14 Армата', 'Россия', 'medium', 'Легендарная', 5, 200, 42, 48, 31, 1650, 'arm4', 29, 'Необитаемая башня и мощная защита нового поколения.', 'Российский основной танк на платформе «Армата».'),
   T('k2', 'K2 Black Panther', 'Корея', 'medium', 'Легендарная', 5, 188, 39, 47, 37, 1600, 'eng3', 30, 'Быстрый и точный танк с автоматом заряжания.', 'Южнокорейский основной боевой танк.'),
   T('pzh', 'PzH 2000', 'Германия', 'arty', 'Легендарная', 5, 120, 18, 78, 24, 1700, 'wpn4', 31, 'Самая мощная артиллерия: бьёт по всем целям.', 'Немецкая самоходная гаубица калибра 155 мм.'),
+  { ...T('ob279', 'Объект 279', 'СССР', 'heavy', 'Легендарная', 5, 225, 48, 46, 20, 0, null, 32, 'Легендарный тяжёлый танк с «ленточной» ходовой.', 'Советский опытный тяжёлый танк 1950-х годов.'), special: { text: 'Награда сезонного пропуска (30 уровень)' } },
+  { ...T('strv103', 'Strv 103', 'Швеция', 'td', 'Легендарная', 5, 160, 30, 74, 26, 0, null, 33, 'Безбашенный охотник с огромной огневой мощью.', 'Шведская безбашенная самоходная установка.'), special: { text: 'Награда за 4 выполненные недельные цели' } },
 ];
 export const TANK_BY_ID = Object.fromEntries(TANKS.map((t) => [t.id, t]));
 export const STARTER_TANK = 't34';
@@ -359,3 +361,78 @@ export const clanGoal = (members) => CLAN.goalPerMember * Math.max(1, Math.min(m
 // ---------- Напоминания бота ----------
 export const NOTIFY_TYPES = ['builds', 'fuel', 'bonus', 'event'];
 export const REMIND = { bonusHourUtc: 16, eventHourUtc: 8, activeDays: 3, eventActiveDays: 7 };
+
+// ---------- Расходники и модули ----------
+export const ITEMS = [
+  { id: 'kit', name: 'Ремкомплект', desc: 'Восстанавливает 40% прочности. Не тратит энергию.', cost: { steel: 60, scrap: 30 }, max: 9 },
+  { id: 'smoke', name: 'Дымовая завеса', desc: 'Следующая атака врага гарантированно промахнётся.', cost: { steel: 40, scrap: 25 }, max: 9 },
+  { id: 'boost', name: 'Форсаж', desc: 'Мгновенно восстанавливает энергию до максимума.', cost: { steel: 50, scrap: 15, science: 20 }, max: 9 },
+];
+export const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+export const STARTER_ITEMS = { kit: 1, smoke: 1, boost: 1 };
+export const MODULES = [
+  { id: 'gun', name: 'Орудие', desc: '+4% к огневой мощи за уровень', effect: { attackPct: 4 } },
+  { id: 'engine', name: 'Двигатель', desc: '+1 к мобильности за уровень', effect: { mobilityFlat: 1 } },
+  { id: 'armor', name: 'Бронирование', desc: '+4% к броне и +2% к прочности за уровень', effect: { armorPct: 4, hpPct: 2 } },
+];
+export const MODULE_MAX = 5;
+/** Цена улучшения модуля до уровня next; требуется исследовательский центр того же уровня. */
+export const moduleCost = (tank, next) => ({ steel: 90 * next * tank.tier, scrap: 25 * next * tank.tier, science: 12 * next * tank.tier });
+
+// ---------- Бесконечный рейд ----------
+export const RAID = { minLevel: 4, fuel: 10, attempts: 3, healPct: 0.2 };
+export const raidReward = (waves) => ({ credits: 60 * waves + 4 * waves * waves, steel: 20 * waves, scrap: 8 * waves, science: 2 * waves, fuel: 0, xp: 15 * waves });
+
+// ---------- Клановые войны (итоги прошлой недели) ----------
+export const WAR = { minPoints: 10, bands: [
+  { maxRank: 1, name: '1 место', reward: { credits: 5000, steel: 1500, scrap: 500, science: 300 } },
+  { maxRank: 3, name: 'Топ-3', reward: { credits: 3000, steel: 900, scrap: 300, science: 150 } },
+  { maxRank: 10, name: 'Топ-10', reward: { credits: 1500, steel: 450, scrap: 150, science: 75 } },
+  { maxRank: 9999, name: 'Участие', reward: { credits: 600, steel: 150, scrap: 50, science: 25 } },
+] };
+export const warBand = (rank) => WAR.bands.find((b) => rank <= b.maxRank);
+
+// ---------- Сюжетная кампания ----------
+const CE = (tankId, level, role) => ({ tankId, level, role });
+const CH = (id, title, intro, reward, stages) => ({ id, title, intro, reward, stages });
+const ST = (id, name, story, arena, weather, diff, fuel, reqLevel, enemies, rw, bonus, turnLimit) => ({ id, name, story, arena, weather, diff, fuel, reqLevel, enemies, rw, bonus, turnLimit });
+export const CAMPAIGN = [
+  CH('ch1', 'Глава 1. Первый рубеж', 'Противник перешёл границу. Ваш штаб — последняя линия обороны, а у вас всего несколько машин.', { credits: 800, steel: 250, scrap: 80, science: 60, xp: 150 }, [
+    ST('k1_1', 'Первые выстрелы', 'Разведчики сообщают об одиноком танке у границы. Проверьте, готовы ли ваши экипажи.', 'desert', 'clear', 0.9, 5, 1, [CE('t70', 1, 'assault')], { credits: 120, scrap: 18, steel: 35, xp: 50, science: 10 }, { turns: 5 }),
+    ST('k1_2', 'Мост у реки', 'Враг пытается захватить переправу. Если мост падёт, дорога на базу открыта.', 'coast', 'clear', 0.95, 5, 1, [CE('sherman', 1, 'assault')], { credits: 150, scrap: 22, steel: 44, xp: 60, science: 10 }, { turns: 6 }),
+    ST('k1_3', 'Дозорный патруль', 'В тумане замечены два вражеских дозорных. Они не должны вернуться с донесением.', 'hills', 'fog', 1, 6, 2, [CE('m24', 2, 'skirmisher'), CE('t70', 2, 'assault')], { credits: 190, scrap: 28, steel: 54, xp: 70, science: 12 }, { noLoss: true }),
+    ST('k1_4', 'Укреплённый хутор', 'Хутор превращён в опорный пункт. Выбейте противника, пока не подошли подкрепления.', 'desert', 'sand', 1, 7, 3, [CE('sherman', 2, 'assault'), CE('hellcat', 2, 'skirmisher')], { credits: 230, scrap: 34, steel: 64, xp: 80, science: 14 }, { turns: 8 }),
+    ST('k1_5', 'Колонна снабжения', 'Колонна с топливом и снарядами идёт к фронту. Уничтожьте её за ограниченное время.', 'coast', 'rain', 1.02, 8, 4, [CE('t55', 3, 'assault'), CE('su76', 3, 'skirmisher')], { credits: 280, scrap: 42, steel: 80, xp: 95, science: 16 }, { noLoss: true }, 14),
+    ST('k1_6', 'Командир заставы', 'Командир заставы лично возглавил оборону. Это ваш первый серьёзный противник.', 'factory', 'clear', 1.05, 10, 5, [CE('panther', 4, 'boss')], { credits: 420, scrap: 60, steel: 120, xp: 150, science: 30 }, { turns: 12 }),
+  ]),
+  CH('ch2', 'Глава 2. Стальной вал', 'Противник стянул тяжёлую технику и строит укреплённую линию. Нужны броня, тактика и сильный отряд.', { credits: 2000, steel: 600, scrap: 200, science: 150, xp: 400 }, [
+    ST('k2_1', 'Прорыв на север', 'Разведка нашла слабое место в обороне. Ударьте по нему, пока оно не закрыто.', 'hills', 'clear', 1.05, 10, 7, [CE('t62', 5, 'assault'), CE('panther', 5, 'guardian')], { credits: 480, scrap: 70, steel: 140, xp: 150, science: 26 }, { turns: 10 }),
+    ST('k2_2', 'Бетонный пояс', 'Бетонные доты и тяжёлые танки в засадах. Будьте осторожны.', 'factory', 'fog', 1.08, 11, 8, [CE('tiger', 5, 'guardian'), CE('su100', 5, 'skirmisher')], { credits: 560, scrap: 84, steel: 170, xp: 175, science: 30 }, { noLoss: true }),
+    ST('k2_3', 'Артиллерийская позиция', 'Вражеская артиллерия обстреливает ваши тылы. Найдите и уничтожьте батарею.', 'desert', 'sand', 1.1, 12, 9, [CE('hummel', 6, 'skirmisher'), CE('is2', 6, 'guardian'), CE('t62', 6, 'assault')], { credits: 680, scrap: 100, steel: 200, xp: 200, science: 36 }, { noLoss: true }),
+    ST('k2_4', 'Ночной марш', 'Под покровом тумана враг перебрасывает резервы. Перехватите их на марше.', 'coast', 'fog', 1.12, 13, 10, [CE('t72', 7, 'assault'), CE('jagd', 6, 'skirmisher')], { credits: 780, scrap: 116, steel: 230, xp: 230, science: 40 }, { turns: 11 }),
+    ST('k2_5', 'Танковый клин', 'Враг бросает вперёд танковый клин. Остановите его на холмах.', 'hills', 'rain', 1.15, 14, 11, [CE('t80', 7, 'assault'), CE('pershing', 7, 'guardian'), CE('su100', 7, 'skirmisher')], { credits: 900, scrap: 130, steel: 260, xp: 260, science: 46 }, { noLoss: true }),
+    ST('k2_6', 'Железный вал', 'Последний рубеж вала держит тяжёлый КВ-2 с гвардией. Падёт он — падёт вся линия.', 'factory', 'clear', 1.2, 16, 13, [CE('kv2', 9, 'boss'), CE('tiger', 8, 'guardian')], { credits: 1300, scrap: 190, steel: 380, xp: 420, science: 80 }, { turns: 14 }),
+  ]),
+  CH('ch3', 'Глава 3. Последний бастион', 'Враг бросает в бой лучшие машины. Это решающая битва за вашу страну.', { credits: 6000, steel: 2000, scrap: 600, science: 400, xp: 1000 }, [
+    ST('k3_1', 'Перевал', 'Горный перевал — единственная дорога к цитадели. Враг держит его новейшей техникой.', 'hills', 'clear', 1.2, 15, 15, [CE('t90', 9, 'assault'), CE('cv90', 9, 'skirmisher')], { credits: 1100, scrap: 160, steel: 320, xp: 320, science: 55 }, { turns: 12 }),
+    ST('k3_2', 'Танковый тупик', 'Современные танки в лобовом столкновении. Победит тот, у кого крепче броня и крепче нервы.', 'factory', 'sand', 1.22, 16, 17, [CE('leo', 9, 'assault'), CE('abrams', 9, 'guardian')], { credits: 1300, scrap: 190, steel: 380, xp: 380, science: 62 }, { noLoss: true }),
+    ST('k3_3', 'Огневой вал', 'Артиллерия врага накрывает местность огневым валом. Прорвитесь сквозь него.', 'desert', 'clear', 1.25, 18, 19, [CE('msta', 10, 'skirmisher'), CE('challenger', 10, 'guardian'), CE('t90', 10, 'assault')], { credits: 1550, scrap: 225, steel: 450, xp: 450, science: 72 }, { turns: 16 }),
+    ST('k3_4', 'Гвардия', 'Элитная гвардия противника вышла на позиции. Здесь нет слабых машин.', 'coast', 'rain', 1.28, 20, 21, [CE('merkava', 10, 'guardian'), CE('jagd', 10, 'skirmisher'), CE('abrams', 10, 'assault')], { credits: 1800, scrap: 260, steel: 520, xp: 520, science: 84 }, { noLoss: true }),
+    ST('k3_5', 'Штурм цитадели', 'Стены цитадели в зоне прямой видимости. Ещё один рывок — и вы у цели.', 'hills', 'fog', 1.3, 22, 23, [CE('t14', 11, 'assault'), CE('paladin', 11, 'skirmisher'), CE('leo', 11, 'guardian')], { credits: 2100, scrap: 300, steel: 600, xp: 600, science: 96 }, { turns: 18 }),
+    ST('k3_6', 'Последний бастион', 'Главнокомандующий врага ждёт вас в бункере. Это конец войны — или ваш конец.', 'factory', 'clear', 1.38, 26, 24, [CE('t14', 13, 'boss'), CE('challenger', 12, 'guardian'), CE('pzh', 12, 'skirmisher')], { credits: 3200, scrap: 450, steel: 900, xp: 900, science: 160 }, { turns: 22 }),
+  ]),
+];
+/** Этапы кампании как обычные операции с условием прохождения предыдущего этапа. */
+export const CAMPAIGN_MISSIONS = (() => {
+  const out = []; let prev = null;
+  CAMPAIGN.forEach((ch, ci) => ch.stages.forEach((st, si) => {
+    out.push({ id: st.id, type: 'campaign', name: st.name, desc: st.story, story: st.story, chapter: ch.id, chapterIndex: ci, order: si + 1, prev,
+      arena: st.arena, weather: st.weather, diff: st.diff, fuel: st.fuel, reqLevel: st.reqLevel, reqRadar: 0, enemies: st.enemies,
+      reward: st.rw, bonus: st.bonus, ...(st.turnLimit ? { turnLimit: st.turnLimit } : {}) });
+    prev = st.id;
+  }));
+  return out;
+})();
+MISSIONS.push(...CAMPAIGN_MISSIONS);
+for (const m of CAMPAIGN_MISSIONS) MISSION_BY_ID[m.id] = m;
+MISSION_TYPES.campaign = { name: 'Кампания', desc: 'Сюжетные этапы: проходятся по порядку.' };

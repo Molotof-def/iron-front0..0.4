@@ -25,7 +25,8 @@ test('обёртка миграций пропускает ВСЕ методы �
   assert.deepEqual(fnNames(wrapped), fnNames(pg));
   for (const name of fnNames(pg)) {
     ensured = 0;
-    await assert.rejects(() => wrapped[name]('1', '2', async () => ({})), /db-called/);
+    if (name === 'adminStats') await wrapped[name](); // собирает сводку по частям и не бросает исключений
+    else await assert.rejects(() => wrapped[name]('1', '2', async () => ({})), /db-called/);
     assert.equal(ensured, 1, `${name}: миграции не дождались`);
   }
 });

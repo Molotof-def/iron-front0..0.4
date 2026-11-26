@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CrewPanel } from '../components/Crew';
+import { ItemsPanel, ModulesPanel } from '../components/Gear';
 import { Icon } from '../components/Icon';
 import { TankArt } from '../components/TankArt';
 import { Bar, Btn, ClassBadge, CostList, Empty, Modal, Panel, StatRow, TimerBar } from '../components/ui';
@@ -48,7 +49,7 @@ export function HangarScreen() {
         <p className="muted small hist">{cur.c.history}</p>
       </Panel>
 
-      {cur.v.owned && <CrewPanel cfg={cur.c} v={cur.v} />}
+      {cur.v.owned && <div className="crew hangar-extra"><CrewPanel cfg={cur.c} v={cur.v} /><ModulesPanel cfg={cur.c} v={cur.v} /><ItemsPanel /></div>}
 
       <Panel className="collection" title="Коллекция" icon="star" right={<span className="muted small">{view.tanks.filter((t) => t.owned).length}/{config.tanks.length}</span>}>
         <div className="filters" role="tablist">{FILTERS.map(([k, n]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{n}</button>)}</div>
@@ -130,6 +131,7 @@ function ProduceBlock({ v, cfg }: { v: TankView; cfg: TankCfg }) {
     <div className="actions">
       <div className="req-row"><CostList cost={cfg.cost} have={view.resources} /><span className="muted"><Icon name="clock" size={13} /> {duration(v.produceSeconds)}</span></div>
       <p className="muted small">Требуется: ангар {cfg.reqHangar} ур., командир {cfg.reqLevel} ур.{techName ? `, исследование «${techName}»` : ''}</p>
+      {cfg.special && <p className="ok-note"><Icon name="star" size={14} /> Особая машина: {cfg.special.text}.</p>}
       {v.problem && <p className="problem"><Icon name="lock" size={14} />{v.problem.message}</p>}
       <Btn variant="amber" block icon="hangar" disabled={busy || Boolean(v.problem)} onClick={() => act('tank/produce', { tankId: cfg.id }, `${cfg.name}: производство запущено`)}>Произвести</Btn>
     </div>

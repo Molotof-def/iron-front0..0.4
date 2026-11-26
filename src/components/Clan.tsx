@@ -50,6 +50,23 @@ export function ClanPanel() {
             {view.clan.claimed ? 'Награда получена' : done ? 'Забрать награду' : 'Цель ещё не выполнена'}
           </Btn>
         </Panel>
+        {c.war && (
+          <Panel title="Клановая война" icon="trophy" className="war">
+            <p className="muted small">Каждую неделю кланы соревнуются по сумме очков. Награда зависит от места клана и вашего личного вклада (не меньше {config.war.minPoints} очков).</p>
+            <p>Место клана на этой неделе: <b className="amber">{c.war.liveRank ?? '—'}</b> из {c.war.clans}</p>
+            {c.war.prev ? (
+              <div className="season-claim">
+                <b>Итоги прошлой недели: {c.war.prev.band} (место {c.war.prev.rank} из {c.war.prev.clans})</b>
+                <ul className="reward-list small">{costEntries(c.war.prev.reward).map(([k, v]) => <li key={k}><ResIcon k={k} size={13} />{num(v)}</li>)}</ul>
+                <p className="muted small">Ваш вклад: {view.clan.prevPoints} очков.</p>
+                <Btn variant={view.clan.warClaimed || view.clan.prevPoints < config.war.minPoints ? 'ghost' : 'amber'} block icon={view.clan.warClaimed ? 'check' : 'trophy'}
+                  disabled={busy || view.clan.warClaimed || view.clan.prevPoints < config.war.minPoints} onClick={async () => { await act('clan/war-claim', {}, 'Награда клановой войны получена'); void load(''); }}>
+                  {view.clan.warClaimed ? 'Награда получена' : view.clan.prevPoints < config.war.minPoints ? 'Мало личных очков' : 'Забрать награду'}
+                </Btn>
+              </div>
+            ) : <p className="muted small">Итоги появятся после завершения недели.</p>}
+          </Panel>
+        )}
         <Panel title="Состав" icon="profile">
           <ol className="board">{c.members.map((m, i) => (
             <li key={`${m.nickname}-${i}`} className={m.me ? 'me' : ''}><span>{i + 1}</span><b>{m.nickname}{m.leader && <em className="rec">лидер</em>}</b><small>ур. {m.level} · {m.points} оч.</small></li>

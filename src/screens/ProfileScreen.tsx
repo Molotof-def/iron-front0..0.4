@@ -4,6 +4,7 @@ import { ClanPanel } from '../components/Clan';
 import { CosmeticsPanel } from '../components/Cosmetics';
 import { NotifyPanel, SettingsPanel } from '../components/Settings';
 import { ReferralPanel } from '../components/Social';
+import { RankingsPanel } from '../components/Rankings';
 import { Tabs } from '../components/Tabs';
 import { Bar, Btn, Panel } from '../components/ui';
 import { useGame } from '../state/GameProvider';
@@ -17,7 +18,7 @@ const BONUS_LABEL: [string, string, string][] = [
   ['rewardPct', 'Награды операций', '%'], ['xpPct', 'Опыт командира', '%'], ['fuelCostPct', 'Расход топлива', '%'], ['powerFlat', 'Электроэнергия', ''],
 ];
 
-type PTab = 'cmd' | 'friends' | 'clan' | 'look' | 'set';
+type PTab = 'cmd' | 'rank' | 'friends' | 'clan' | 'look' | 'set';
 
 export function ProfileScreen() {
   const { view, act, busy, now, markSeen } = useGame();
@@ -33,9 +34,10 @@ export function ProfileScreen() {
   return (
     <div className="screen">
       <Tabs<PTab> value={tab} onChange={setTab} tabs={[
-        { id: 'cmd', label: 'Командир', icon: 'profile' }, { id: 'friends', label: 'Друзья', icon: 'star', badge: view.referral.claimable || null },
+        { id: 'cmd', label: 'Командир', icon: 'profile' }, { id: 'rank', label: 'Рейтинги', icon: 'trophy' }, { id: 'friends', label: 'Друзья', icon: 'star', badge: view.referral.claimable || null },
         { id: 'clan', label: 'Клан', icon: 'flag' }, { id: 'look', label: 'Оформление', icon: 'wrench' }, { id: 'set', label: 'Настройки', icon: 'info' },
       ]} />
+      {tab === 'rank' && <div className="profile-grid one"><RankingsPanel /></div>}
       {tab === 'friends' && <div className="profile-grid"><ReferralPanel /></div>}
       {tab === 'clan' && <div className="profile-grid"><ClanPanel /></div>}
       {tab === 'look' && <div className="profile-grid"><CosmeticsPanel /></div>}

@@ -24,6 +24,12 @@ export function ShareCard({ battle, open, onClose }: { battle: BattleView; open:
     const w = tg() as { openTelegramLink?: (u: string) => void } | undefined;
     if (w?.openTelegramLink) w.openTelegramLink(url); else window.open(url, '_blank', 'noopener');
   };
+  const shareLog = () => {
+    const body = `${text}\n\n${battle.log.slice(-8).join('\n')}`.slice(0, 1400);
+    const url = `https://t.me/share/url?url=${encodeURIComponent(link ?? 'https://t.me')}&text=${encodeURIComponent(body)}`;
+    const w = tg() as { openTelegramLink?: (u: string) => void } | undefined;
+    if (w?.openTelegramLink) w.openTelegramLink(url); else window.open(url, '_blank', 'noopener');
+  };
   /** Рисуем карточку на canvas, вставляя SVG танка как изображение. */
   const download = async () => {
     try {
@@ -65,6 +71,7 @@ export function ShareCard({ battle, open, onClose }: { battle: BattleView; open:
         <p className="amber small">{view.commander.rank} {view.nickname}</p>
       </div>
       <div className="two"><Btn variant="amber" icon="arrow" onClick={share}>Отправить в чат</Btn><Btn variant="ghost" icon="check" onClick={() => void download()}>Сохранить картинку</Btn></div>
+      <Btn variant="ghost" block icon="info" onClick={shareLog}>Поделиться ходом боя</Btn>
     </Modal>
   );
 }

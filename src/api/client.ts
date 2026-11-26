@@ -1,5 +1,5 @@
 import { initData } from '../lib/telegram';
-import type { ClanData, GameConfig, GameView, LeaderRow, Opponent } from '../types';
+import type { ClanData, GameConfig, GameView, LeaderRow, Opponent, TopRow } from '../types';
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '';
 
@@ -46,5 +46,6 @@ export const api = {
   opponents: () => request<{ opponents: Opponent[]; ticketsLeft: number }>('GET', '/api/game/pvp/opponents'),
   clan: (q = '') => request<ClanData>('GET', `/api/game/clan${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   clanOp: (op: 'create' | 'join' | 'leave', payload: Record<string, unknown> = {}) => request<ClanData>('POST', `/api/game/clan-${op}`, payload),
+  top: (kind: 'pvp' | 'raid' | 'xp') => request<{ kind: string; rows: TopRow[]; me: { rank: number | null; value: number } }>('GET', `/api/game/top?kind=${kind}`),
   leaderboard: () => request<{ top: LeaderRow[]; rank: number | null }>('GET', '/api/game/leaderboard'),
 };

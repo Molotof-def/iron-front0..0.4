@@ -14,7 +14,7 @@ export function buildConfig() {
     }),
     tanks: D.TANKS.map((t) => ({
       id: t.id, name: t.name, country: t.country, class: t.class, rarity: t.rarity, tier: t.tier, shape: t.shape,
-      desc: t.desc, history: t.history, base: { hp: t.hp, armor: t.armor, attack: t.attack, mobility: t.mobility },
+      desc: t.desc, history: t.history, special: t.special || null, base: { hp: t.hp, armor: t.armor, attack: t.attack, mobility: t.mobility },
       cost: t.cost, reqHangar: t.reqHangar, reqLevel: t.reqLevel, reqTech: t.reqTech,
     })),
     techs: D.TECHS.map((t) => ({ id: t.id, branch: t.branch, name: t.name, desc: t.desc, req: t.req, lab: t.lab, cost: t.cost })),
@@ -28,6 +28,9 @@ export function buildConfig() {
     levelGrowth: D.LEVEL_GROWTH,
     tutorial: D.TUTORIAL.map((t) => ({ id: t.id, title: t.title, text: t.text, screen: t.screen, reward: t.reward })),
     dailyBonus: D.DAILY_BONUS,
+    items: D.ITEMS, modules: D.MODULES.map((m) => ({ id: m.id, name: m.name, desc: m.desc })), moduleMax: D.MODULE_MAX,
+    campaign: D.CAMPAIGN.map((c) => ({ id: c.id, title: c.title, intro: c.intro, reward: c.reward, stages: c.stages.map((st) => st.id) })),
+    raid: D.RAID, war: { minPoints: D.WAR.minPoints, bands: D.WAR.bands },
     ranks: D.RANKS,
     crew: D.CREW,
     skills: Object.fromEntries(Object.keys(D.CLASSES).map((c) => [c, D.skillsFor(c).map((k) => ({ id: k.id, name: k.name, desc: k.desc, max: k.max }))])),
@@ -45,20 +48,21 @@ const problemOf = (p) => (p ? { code: p.code, message: p.message } : null);
 
 function missionView(state, m, intel) {
   const problem = E.checkMission(state, m);
-  const locked = problem && ['commander_level', 'radar', 'training'].includes(problem.code);
+  const locked = problem && ['commander_level', 'radar', 'training', 'locked_prev'].includes(problem.code);
   const view = {
     id: m.id, type: m.type, name: m.name, desc: m.desc, arena: m.arena, weather: m.weather,
     fuel: E.fuelCost(state, m), reqLevel: m.reqLevel, reqRadar: m.reqRadar, reqTraining: m.reqTraining || 0,
     turnLimit: m.turnLimit || 0, rules: m.rules || null, bonus: m.bonus, reward: m.reward,
     clears: state.missionClears[m.id] || 0, locked: Boolean(locked), problem: problemOf(problem), intel,
     enemyCount: m.enemies.length,
+    ...(m.chapter ? { chapter: m.chapter, order: m.order, story: m.story } : {}),
   };
   if (!locked) {
-    if (intel >= 2) {
+    if (intel >= 2 || m.chapter) {
       view.enemies = m.enemies.map((e) => {
         const def = D.TANK_BY_ID[e.tankId];
         const o = { name: def.name, class: def.class, level: e.level, shape: def.shape, tankId: def.id };
-        if (intel >= 3) {
+        if (intel >= 3 || m.chapter) {
           const s = tankStats(def, e.level, {});
           Object.assign(o, { role: e.role, hp: Math.round(s.hp * m.diff * (e.role === 'boss' ? 1.25 : 1)), attack: Math.round(s.attack * m.diff), armor: Math.round(s.armor * m.diff) });
         }
@@ -75,7 +79,7 @@ function battleView(b) {
   if (!b) return null;
   const unit = (u) => ({ tankId: u.tankId, name: u.name, cls: u.cls, role: u.role, hp: u.hp, maxHp: u.maxHp, attack: u.attack, armor: u.armor, mobility: u.mobility, energy: u.energy, shield: u.shield > 0, aim: u.aim });
   return {
-    id: b.id, missionId: b.missionId, title: b.title, pvp: b.pvp, status: b.status, turn: b.turn, turnLimit: b.turnLimit, arena: b.arena, weather: b.weather,
+    id: b.id, missionId: b.missionId, title: b.title, pvp: b.pvp, raid: b.raid, status: b.status, turn: b.turn, turnLimit: b.turnLimit, arena: b.arena, weather: b.weather,
     squad: b.squad.map(unit), active: b.active, enemies: b.enemies.map(unit), foe: b.foe, freeRepairs: b.freeRepairs,
     log: b.log.slice(-14), reward: b.reward, claimed: b.claimed,
   };
@@ -134,6 +138,10 @@ export function buildView(state, now, opts = {}) {
       stats: tankStats(def, lvl, tb),
       nextStats: owned && owned.level < maxLvl ? tankStats(def, lvl + 1, tb) : null,
       crew: owned ? E.crewInfo(owned, def.class) : null,
+      modules: owned ? D.MODULES.map((m) => {
+        const lvl = owned.modules?.[m.id] || 0; const next = lvl + 1;
+        return { id: m.id, level: lvl, cost: lvl >= D.MODULE_MAX ? null : D.moduleCost(def, next), needLab: lvl >= D.MODULE_MAX ? 0 : next, blocked: lvl >= D.MODULE_MAX ? 'Максимальный уровень' : state.buildings.lab < next ? `Нужен исследовательский центр ${next} уровня` : null };
+      }) : null,
       cosmetic: owned ? (state.cosmetics[def.id] || { camo: 'default', emblem: 'none' }) : null,
       upgradeCost: upCost, upgradeProblem: owned ? problemOf(E.checkUpgradeTank(state, def.id)) : null,
       produceSeconds: owned ? 0 : sec(E.produceDurationMs(state, def, ts, bonuses)),
@@ -178,7 +186,9 @@ export function buildView(state, now, opts = {}) {
     weekly: E.weeklyStatus(state, now),
     notify: state.notify.enabled, notifyTypes: state.notify.types,
     pvp: pvpView(state, now), pass: passView(state, now), cosmetics: cosmeticsView(state),
-    clan: { points: state.clan.points, claimed: state.clan.claimedWeek === state.clan.week, week: state.clan.week, goalPerMember: D.CLAN.goalPerMember },
+    clan: { points: state.clan.points, claimed: state.clan.claimedWeek === state.clan.week, week: state.clan.week, goalPerMember: D.CLAN.goalPerMember, prevWeek: state.clan.prevWeek, prevPoints: state.clan.prevPoints, warClaimed: state.clan.warClaimedWeek === state.clan.prevWeek },
+    items: state.items, raid: { best: state.raid.best, used: state.raid.used, attempts: D.RAID.attempts, fuel: D.RAID.fuel, minLevel: D.RAID.minLevel, season: state.raid.season },
+    campaign: { claimed: state.campaign.claimed },
     referral: { ...E.referralStatus(state, opts.referral), link: opts.referralLink || null, welcomed: state.referral.welcomed },
     stats: state.stats, events: state.events, legacy: state.legacy ? { importedAt: state.legacy.importedAt } : null,
   };

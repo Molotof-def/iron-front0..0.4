@@ -4,7 +4,7 @@ export type Resources = Record<ResourceKey, number>;
 export type TankClass = 'light' | 'medium' | 'heavy' | 'td' | 'arty';
 export type Rarity = 'Обычная' | 'Редкая' | 'Эпическая' | 'Легендарная';
 export type BuildingId = 'hq' | 'hangar' | 'factory' | 'storage' | 'lab' | 'repair' | 'training' | 'radar';
-export type MissionType = 'recon' | 'defense' | 'capture' | 'trial' | 'boss';
+export type MissionType = 'recon' | 'defense' | 'capture' | 'trial' | 'boss' | 'campaign';
 export type Problem = { code: string; message: string } | null;
 export type Cost = Partial<Resources>;
 export type Stats4 = { hp: number; armor: number; attack: number; mobility: number };
@@ -13,7 +13,7 @@ export interface ClassCfg { name: string; short: string; role: string; desc: str
 export interface BuildingCfg { id: BuildingId; name: string; category: string; desc: string; maxLevel: number; power: number }
 export interface TankCfg {
   id: string; name: string; country: string; class: TankClass; rarity: Rarity; tier: number; shape: number;
-  desc: string; history: string; base: Stats4; cost: Cost; reqHangar: number; reqLevel: number; reqTech: string | null;
+  desc: string; history: string; special: { text: string } | null; base: Stats4; cost: Cost; reqHangar: number; reqLevel: number; reqTech: string | null;
 }
 export interface TechCfg { id: string; branch: string; name: string; desc: string; req: string | null; lab: number; cost: Cost }
 export interface AchievementCfg { id: string; name: string; desc: string; goal: number; reward: Cost & { xp?: number } }
@@ -31,6 +31,11 @@ export interface GameConfig {
   pvpTiers: { id: string; name: string; min: number; reward: Cost }[];
   pvp: { dailyTickets: number; minLevel: number; win: Cost & { xp?: number }; loss: Cost & { xp?: number } };
   clan: { minLevel: number; maxMembers: number; goalPerMember: number; reward: Cost; minName: number; maxName: number };
+  items: { id: string; name: string; desc: string; cost: Cost; max: number }[];
+  modules: { id: string; name: string; desc: string }[]; moduleMax: number;
+  campaign: { id: string; title: string; intro: string; reward: Cost & { xp?: number }; stages: string[] }[];
+  raid: { minLevel: number; fuel: number; attempts: number; healPct: number };
+  war: { minPoints: number; bands: { maxRank: number; name: string; reward: Cost }[] };
 }
 export interface TutorialStepCfg { id: string; title: string; text: string; screen: Screen; reward: Cost & { xp?: number } }
 
@@ -46,6 +51,7 @@ export interface BuildingView {
 export interface CrewInfo { xp: number; points: number; spent: number; free: number; skills: Record<string, number>; nextAt: number | null }
 export interface TankView {
   crew: CrewInfo | null; cosmetic: { camo: string; emblem: string } | null;
+  modules: { id: string; level: number; cost: Cost | null; needLab: number; blocked: string | null }[] | null;
   id: string; owned: boolean; level: number; stats: Stats4; nextStats: Stats4 | null; upgradeCost: Cost | null;
   upgradeProblem: Problem; produceSeconds: number; producing: ProduceQueueItem | null; problem: Problem;
 }
@@ -56,15 +62,15 @@ export interface MissionView {
   reqLevel: number; reqRadar: number; reqTraining: number; turnLimit: number; clears: number; locked: boolean;
   rules: { classes?: TankClass[]; maxSquad?: number; minClasses?: number } | null;
   bonus: { turns?: number; noLoss?: boolean }; reward: Cost & { xp: number }; problem: Problem; intel: number;
-  enemyCount: number; enemies?: EnemyIntel[];
+  enemyCount: number; enemies?: EnemyIntel[]; chapter?: string; order?: number; story?: string;
 }
 export interface BattleUnit {
   tankId: string; name: string; cls: TankClass; role: string | null; hp: number; maxHp: number; attack: number;
   armor: number; mobility: number; energy: number; shield: boolean; aim: number;
 }
-export interface RewardView extends Cost { xp: number; bonus: boolean; firstClear: boolean; rating?: number; event?: boolean }
+export interface RewardView extends Cost { xp: number; bonus: boolean; firstClear: boolean; rating?: number; event?: boolean; waves?: number }
 export interface BattleView {
-  title: string; pvp: { opponent: { id: string; nickname: string; level: number; rating: number; bot: boolean } } | null;
+  title: string; raid: { wave: number } | null; pvp: { opponent: { id: string; nickname: string; level: number; rating: number; bot: boolean } } | null;
   id: string; missionId: string; status: 'active' | 'won' | 'lost' | 'retreated'; turn: number; turnLimit: number;
   arena: string; weather: string; squad: BattleUnit[]; active: number; enemies: BattleUnit[]; foe: number;
   freeRepairs: number; log: string[]; reward: RewardView | null; claimed: boolean;
@@ -87,7 +93,8 @@ export interface GameView {
   tutorial: { step: number; total: number; done: boolean; ready: boolean };
   bonus: { available: boolean; streak: number; nextDay: number };
   weekly: WeeklyView; notify: boolean; notifyTypes: NotifyTypes; referral: ReferralView;
-  pvp: PvpView; pass: PassView; cosmetics: { camos: CosmeticState[]; emblems: CosmeticState[] }; clan: { points: number; claimed: boolean; week: number; goalPerMember: number };
+  items: Record<string, number>; raid: { best: number; used: number; attempts: number; fuel: number; minLevel: number; season: string }; campaign: { claimed: string[] };
+  pvp: PvpView; pass: PassView; cosmetics: { camos: CosmeticState[]; emblems: CosmeticState[] }; clan: { points: number; claimed: boolean; week: number; goalPerMember: number; prevWeek: number; prevPoints: number; warClaimed: boolean };
   stats: { battles: number; wins: number; losses: number; built: number; researched: number; upgrades: number; produced: number; bossWins: number };
   events: GameEvent[]; legacy: { importedAt: number } | null;
 }
@@ -118,6 +125,8 @@ export interface Opponent {
   units: { tankId: string; name: string; cls: TankClass; shape: number; level: number; hp: number; attack: number; armor: number; camo: string; emblem: string }[];
 }
 export interface ClanMember { nickname: string; level: number; points: number; leader: boolean; me: boolean }
-export interface ClanInfo { id: string; name: string; tag: string; total: number; goal: number; maxMembers: number; members: ClanMember[]; weekEndsAt: number }
+export interface ClanWar { liveRank: number | null; clans: number; prev: { rank: number; pts: number; clans: number; band: string; reward: Cost } | null }
+export interface TopRow { rank: number; nickname: string; level: number; value: number }
+export interface ClanInfo { war: ClanWar | null; id: string; name: string; tag: string; total: number; goal: number; maxMembers: number; members: ClanMember[]; weekEndsAt: number }
 export interface ClanListRow { id: string; name: string; tag: string; members: number; points: number }
 export interface ClanData { clan: ClanInfo | null; list: ClanListRow[]; minLevel: number; unavailable?: boolean }

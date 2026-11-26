@@ -84,6 +84,14 @@ export const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS iron_clan_members_clan_idx ON iron_clan_members (clan_id);
     `,
   },
+  {
+    version: 5,
+    name: 'clan_war_results',
+    sql: `
+      ALTER TABLE iron_players ADD COLUMN IF NOT EXISTS clan_prev_points INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE iron_players ADD COLUMN IF NOT EXISTS clan_prev_week INTEGER NOT NULL DEFAULT -1;
+    `,
+  },
 ];
 
 /** Версии, без которых игра работать не может. Остальные — дополнительные функции: при сбое игра продолжает работать без них. */

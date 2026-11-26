@@ -10,7 +10,7 @@ const rngFixed = (v = 0.5) => () => v;
 const act = (state, action, payload, now, extra = {}) => E.perform(state, action, payload, { now, rng: rngFixed(), ...extra });
 
 test('каталог: целостность данных', () => {
-  assert.equal(D.TANKS.length, 32);
+  assert.equal(D.TANKS.length, 34);
   assert.equal(new Set(D.TANKS.map((t) => t.id)).size, D.TANKS.length);
   for (const cls of ['light', 'medium', 'heavy', 'td', 'arty']) assert.ok(D.TANKS.some((t) => t.class === cls), cls);
   for (const t of D.TECHS) { if (t.req) assert.ok(D.TECH_BY_ID[t.req], `req ${t.id}`); }
@@ -18,7 +18,7 @@ test('каталог: целостность данных', () => {
   for (const m of D.MISSIONS) for (const e of m.enemies) assert.ok(D.TANK_BY_ID[e.tankId], `${m.id}:${e.tankId}`);
   assert.equal(Object.keys(D.BUILDINGS).length, 8);
   assert.equal(Object.keys(D.BRANCHES).length, 6);
-  assert.deepEqual(new Set(D.MISSIONS.map((m) => m.type)), new Set(['recon', 'defense', 'capture', 'trial', 'boss']));
+  assert.deepEqual(new Set(D.MISSIONS.map((m) => m.type)), new Set(['recon', 'defense', 'capture', 'trial', 'boss', 'campaign']));
   const cfg = JSON.stringify(buildConfig());
   assert.ok(!cfg.includes('"enemies"'), 'конфиг не раскрывает составы врагов');
 });
